@@ -36,3 +36,14 @@ body {
   background: rgba(14, 165, 233, 0.16);
   color: var(--foreground);
 }
+
+@keyframes heroFloat {
+  0%,
+  100% {
+    transform: scale(1.06) translate3d(0, 0, 0);
+  }
+
+  50% {
+    transform: scale(1.09) translate3d(0, -10px, 0);
+  }
+}
