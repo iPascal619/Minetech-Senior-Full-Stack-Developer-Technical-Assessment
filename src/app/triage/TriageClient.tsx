@@ -111,21 +111,78 @@ export default function TriagePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingTickets, setLoadingTickets] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [copiedReplyId, setCopiedReplyId] = useState<string | null>(null);
   const [deletingTicketId, setDeletingTicketId] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const copyResetTimeoutRef = useRef<number | null>(null);
+  const modalFocusTimeoutRef = useRef<number | null>(null);
+  const modalCloseTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    void loadTickets();
+    if (!modalOpen) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
 
     return () => {
-      if (copyResetTimeoutRef.current !== null) {
-        window.clearTimeout(copyResetTimeoutRef.current);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [modalOpen]);
+
+  useEffect(() => {
+    if (!modalOpen) {
+      return;
+    }
+
+    if (modalFocusTimeoutRef.current !== null) {
+      window.clearTimeout(modalFocusTimeoutRef.current);
+    }
+
+    modalFocusTimeoutRef.current = window.setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 50);
+
+    return () => {
+      if (modalFocusTimeoutRef.current !== null) {
+        window.clearTimeout(modalFocusTimeoutRef.current);
+        modalFocusTimeoutRef.current = null;
       }
     };
-  }, []);
+  }, [modalOpen]);
+
+  function openModal() {
+    if (modalCloseTimeoutRef.current !== null) {
+      window.clearTimeout(modalCloseTimeoutRef.current);
+      modalCloseTimeoutRef.current = null;
+    }
+
+    setFormError(null);
+    setStatusMessage(null);
+    setModalOpen(true);
+  }
+
+  function closeModal() {
+    if (modalCloseTimeoutRef.current !== null) {
+      window.clearTimeout(modalCloseTimeoutRef.current);
+      modalCloseTimeoutRef.current = null;
+    }
+
+    if (modalFocusTimeoutRef.current !== null) {
+      window.clearTimeout(modalFocusTimeoutRef.current);
+      modalFocusTimeoutRef.current = null;
+    }
+
+    setModalOpen(false);
+    setRawText("");
+    setFormError(null);
+    setStatusMessage(null);
+  }
 
   async function loadTickets() {
     setLoadingTickets(true);
@@ -148,6 +205,26 @@ export default function TriagePage() {
       setLoadingTickets(false);
     }
   }
+
+  useEffect(() => {
+    const initialLoadTimeout = window.setTimeout(() => {
+      void loadTickets();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(initialLoadTimeout);
+
+      if (copyResetTimeoutRef.current !== null) {
+        window.clearTimeout(copyResetTimeoutRef.current);
+      }
+      if (modalFocusTimeoutRef.current !== null) {
+        window.clearTimeout(modalFocusTimeoutRef.current);
+      }
+      if (modalCloseTimeoutRef.current !== null) {
+        window.clearTimeout(modalCloseTimeoutRef.current);
+      }
+    };
+  }, []);
 
   async function handleCopyReply(ticketId: string, suggestedReply: string) {
     try {
@@ -204,12 +281,12 @@ export default function TriagePage() {
     event.preventDefault();
 
     if (!rawText.trim()) {
-      setError("Enter an operational incident or site report before submitting.");
+      setFormError("Enter an operational incident or site report before submitting.");
       return;
     }
 
     setSubmitting(true);
-    setError(null);
+    setFormError(null);
     setStatusMessage(null);
 
     try {
@@ -229,14 +306,21 @@ export default function TriagePage() {
       }
 
       setTickets((current) => [savedTicket, ...current.filter((ticket) => ticket.id !== savedTicket.id)]);
-      setRawText("");
       setStatusMessage(
         data.warnings && data.warnings.length > 0
           ? "Site report saved with a fallback warning."
           : "Operational incident triaged and saved successfully.",
       );
+
+      if (modalCloseTimeoutRef.current !== null) {
+        window.clearTimeout(modalCloseTimeoutRef.current);
+      }
+
+      modalCloseTimeoutRef.current = window.setTimeout(() => {
+        closeModal();
+      }, 1400);
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Failed to classify the incident.");
+      setFormError(submitError instanceof Error ? submitError.message : "Failed to classify the incident.");
     } finally {
       setSubmitting(false);
     }
@@ -263,7 +347,7 @@ export default function TriagePage() {
     <main className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
       <div className="absolute inset-x-0 top-0 -z-10 h-[24rem] bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.16),transparent_36%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.14),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.94),rgba(241,245,249,0.7))]" />
 
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6">
         <header className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.65)] backdrop-blur-xl">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-2xl">
@@ -297,6 +381,16 @@ export default function TriagePage() {
               >
                 Mining Knowledge Base
               </Link>
+              <button
+                type="button"
+                onClick={openModal}
+                className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                <span aria-hidden="true" className="text-base leading-none">
+                  +
+                </span>
+                Log incident
+              </button>
             </nav>
           </div>
 
@@ -322,19 +416,241 @@ export default function TriagePage() {
           </div>
         </header>
 
-        <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-          <section className="rounded-[1.75rem] border border-white/70 bg-white/85 p-6 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.65)] backdrop-blur-xl">
+        <section className="min-w-0 rounded-[1.75rem] border border-white/70 bg-white/85 p-6 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.65)] backdrop-blur-xl">
+          <div className="flex flex-col gap-5 border-b border-slate-200 pb-5">
+            <div className="max-w-3xl">
+              <h2 className="text-xl font-semibold text-slate-950">Operational incident dashboard</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Filter site reports by text search, category, and priority. The table is
+                populated from PostgreSQL.
+              </p>
+            </div>
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,1.7fr)_minmax(11rem,auto)_minmax(11rem,auto)] xl:items-end">
+              <label className="block">
+                <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                  Search incidents
+                </span>
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search raw reports, reporters, or issue summaries..."
+                  className="w-full rounded-full border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-inner outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+                />
+              </label>
+
+              <label className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                <span className="mb-2 block">Category</span>
+                <select
+                  value={categoryFilter}
+                  onChange={(event) => setCategoryFilter(event.target.value)}
+                  className="min-w-40 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+                >
+                  <option value="all">All categories</option>
+                  {categoryOptions.map((category) => (
+                    <option key={category} value={category}>
+                      {formatLabel(category)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                <span className="mb-2 block">Priority</span>
+                <select
+                  value={priorityFilter}
+                  onChange={(event) => setPriorityFilter(event.target.value)}
+                  className="min-w-36 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+                >
+                  <option value="all">All priorities</option>
+                  {priorityOptions.map((priority) => (
+                    <option key={priority} value={priority}>
+                      {formatLabel(priority)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+
+          {error ? (
+            <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </div>
+          ) : null}
+
+          <div className="mt-5 overflow-hidden rounded-3xl border border-slate-200">
+            {loadingTickets ? (
+              <div className="overflow-x-auto">
+                <table className="min-w-[1080px] divide-y divide-slate-200 text-left">
+                  <thead className="bg-slate-50">
+                    <tr className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                      <th className="px-5 py-4">Incident</th>
+                      <th className="px-5 py-4">Category</th>
+                      <th className="px-5 py-4">Priority</th>
+                      <th className="px-5 py-4">Suggested reply</th>
+                      <th className="px-5 py-4">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {Array.from({ length: 4 }).map((_, index) => (
+                      <tr key={index} className="animate-pulse align-top">
+                        <td className="px-5 py-5">
+                          <div className="max-w-xl space-y-3">
+                            <div className="h-4 w-3/4 rounded-full bg-slate-200" />
+                            <div className="h-3 w-1/2 rounded-full bg-slate-200" />
+                            <div className="h-3 w-11/12 rounded-full bg-slate-200" />
+                            <div className="h-16 rounded-2xl bg-slate-100" />
+                          </div>
+                        </td>
+                        <td className="px-5 py-5">
+                          <div className="h-8 w-28 rounded-full bg-slate-200" />
+                        </td>
+                        <td className="px-5 py-5">
+                          <div className="h-8 w-24 rounded-full bg-slate-200" />
+                        </td>
+                        <td className="px-5 py-5">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="h-3 w-28 rounded-full bg-slate-200" />
+                              <div className="h-8 w-20 rounded-full bg-slate-200" />
+                            </div>
+                            <div className="h-24 rounded-2xl bg-slate-100" />
+                          </div>
+                        </td>
+                        <td className="px-5 py-5">
+                          <div className="h-9 w-20 rounded-full bg-slate-200" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : filteredTickets.length === 0 ? (
+              <div className="px-6 py-16 text-center text-sm text-slate-500">
+                No operational incidents match the current search and filters.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-[1080px] divide-y divide-slate-200 text-left">
+                  <thead className="bg-slate-50">
+                    <tr className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                      <th className="px-5 py-4">Incident</th>
+                      <th className="px-5 py-4">Category</th>
+                      <th className="px-5 py-4">Priority</th>
+                      <th className="px-5 py-4">Suggested reply</th>
+                      <th className="px-5 py-4">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {filteredTickets.map((ticket) => (
+                      <tr key={ticket.id} className="align-top transition hover:bg-slate-50/80">
+                        <td className="px-5 py-5">
+                          <div className="max-w-xl space-y-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-slate-950">
+                                {ticket.extracted_fields.subject}
+                              </p>
+                              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                                {formatDate(ticket.created_at)}
+                              </span>
+                            </div>
+                            <p className="text-sm text-slate-600">
+                              <span className="font-medium text-slate-700">Reporter:</span>{" "}
+                              {ticket.extracted_fields.requester}
+                            </p>
+                            <p className="text-sm leading-6 text-slate-600">
+                              {ticket.extracted_fields.issue_summary}
+                            </p>
+                            <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700 ring-1 ring-slate-200/80">
+                              {ticket.raw_text}
+                            </p>
+                          </div>
+                        </td>
+                        <td className="px-5 py-5">
+                          <span className="inline-flex rounded-full bg-sky-50 px-3 py-1 text-sm font-medium text-sky-700 ring-1 ring-sky-200">
+                            {formatLabel(ticket.category)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-5">
+                          <span
+                            className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${priorityClasses(ticket.priority)}`}
+                          >
+                            {formatLabel(ticket.priority)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-5">
+                          <div className="max-w-xl space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+                                Suggested reply
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => void handleCopyReply(ticket.id, ticket.suggested_reply)}
+                                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
+                              >
+                                {copiedReplyId === ticket.id ? "Copied!" : "Copy"}
+                              </button>
+                            </div>
+                            <div className="rounded-2xl bg-slate-50 p-4 text-sm leading-7 text-slate-700 ring-1 ring-slate-200/80">
+                              {ticket.suggested_reply}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-5">
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteTicket(ticket.id)}
+                            disabled={deletingTicketId === ticket.id}
+                            className="inline-flex items-center justify-center rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:border-rose-300 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {deletingTicketId === ticket.id ? "Deleting..." : "Delete"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {modalOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6 sm:px-6"
+          onClick={closeModal}
+        >
+          <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" />
+          <div
+            className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-[1.75rem] border border-white/80 bg-white p-6 shadow-[0_30px_90px_-40px_rgba(15,23,42,0.75)]"
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-950">Log an operational incident</h2>
+              <div className="max-w-md">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="text-xl font-semibold text-slate-950">
+                    Log an operational incident
+                  </h2>
+                  <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 ring-1 ring-sky-200">
+                    Structured output
+                  </span>
+                </div>
                 <p className="mt-2 text-sm leading-6 text-slate-600">
                   Paste a raw site incident report. The API will call Ollama, normalize the
                   response, and persist the structured result.
                 </p>
               </div>
-              <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-sky-700 ring-1 ring-sky-200">
-                Structured output
-              </span>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-lg font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-white hover:text-slate-900"
+                aria-label="Close modal"
+              >
+                ✕
+              </button>
             </div>
 
             <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
@@ -343,6 +659,7 @@ export default function TriagePage() {
                   Operational incident text
                 </span>
                 <textarea
+                  ref={textareaRef}
                   value={rawText}
                   onChange={(event) => setRawText(event.target.value)}
                   placeholder="Safety equipment malfunction reported at Site B. Worker: James Mutua. Drill press showing abnormal vibration since yesterday morning. This is affecting production output."
@@ -368,9 +685,9 @@ export default function TriagePage() {
               </div>
             </form>
 
-            {error ? (
+            {formError ? (
               <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                {error}
+                {formError}
               </div>
             ) : null}
 
@@ -379,204 +696,9 @@ export default function TriagePage() {
                 {statusMessage}
               </div>
             ) : null}
-          </section>
-
-          <section className="rounded-[1.75rem] border border-white/70 bg-white/85 p-6 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.65)] backdrop-blur-xl">
-            <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-950">Operational incident dashboard</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Filter site reports by text search, category, and priority. The table is
-                  populated from PostgreSQL.
-                </p>
-              </div>
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_auto_auto] lg:items-end">
-                <label className="block">
-                  <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-                    Search incidents
-                  </span>
-                  <input
-                    type="search"
-                    value={searchQuery}
-                    onChange={(event) => setSearchQuery(event.target.value)}
-                    placeholder="Search raw reports, reporters, or issue summaries..."
-                    className="w-full rounded-full border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-inner outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
-                  />
-                </label>
-
-                <label className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-                  <span className="mb-2 block">Category</span>
-                  <select
-                    value={categoryFilter}
-                    onChange={(event) => setCategoryFilter(event.target.value)}
-                    className="min-w-40 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
-                  >
-                    <option value="all">All categories</option>
-                    {categoryOptions.map((category) => (
-                      <option key={category} value={category}>
-                        {formatLabel(category)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-                  <span className="mb-2 block">Priority</span>
-                  <select
-                    value={priorityFilter}
-                    onChange={(event) => setPriorityFilter(event.target.value)}
-                    className="min-w-36 rounded-full border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
-                  >
-                    <option value="all">All priorities</option>
-                    {priorityOptions.map((priority) => (
-                      <option key={priority} value={priority}>
-                        {formatLabel(priority)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-            </div>
-
-            <div className="mt-5 overflow-hidden rounded-3xl border border-slate-200">
-              {loadingTickets ? (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-200 text-left">
-                    <thead className="bg-slate-50">
-                      <tr className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                        <th className="px-5 py-4">Incident</th>
-                        <th className="px-5 py-4">Category</th>
-                        <th className="px-5 py-4">Priority</th>
-                        <th className="px-5 py-4">Suggested reply</th>
-                        <th className="px-5 py-4">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white">
-                      {Array.from({ length: 4 }).map((_, index) => (
-                        <tr key={index} className="animate-pulse align-top">
-                          <td className="px-5 py-5">
-                            <div className="max-w-xl space-y-3">
-                              <div className="h-4 w-3/4 rounded-full bg-slate-200" />
-                              <div className="h-3 w-1/2 rounded-full bg-slate-200" />
-                              <div className="h-3 w-11/12 rounded-full bg-slate-200" />
-                              <div className="h-16 rounded-2xl bg-slate-100" />
-                            </div>
-                          </td>
-                          <td className="px-5 py-5">
-                            <div className="h-8 w-28 rounded-full bg-slate-200" />
-                          </td>
-                          <td className="px-5 py-5">
-                            <div className="h-8 w-24 rounded-full bg-slate-200" />
-                          </td>
-                          <td className="px-5 py-5">
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="h-3 w-28 rounded-full bg-slate-200" />
-                                <div className="h-8 w-20 rounded-full bg-slate-200" />
-                              </div>
-                              <div className="h-24 rounded-2xl bg-slate-100" />
-                            </div>
-                          </td>
-                          <td className="px-5 py-5">
-                            <div className="h-9 w-20 rounded-full bg-slate-200" />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : filteredTickets.length === 0 ? (
-                <div className="px-6 py-16 text-center text-sm text-slate-500">
-                  No operational incidents match the current search and filters.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-slate-200 text-left">
-                    <thead className="bg-slate-50">
-                      <tr className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                        <th className="px-5 py-4">Incident</th>
-                        <th className="px-5 py-4">Category</th>
-                        <th className="px-5 py-4">Priority</th>
-                        <th className="px-5 py-4">Suggested reply</th>
-                        <th className="px-5 py-4">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white">
-                      {filteredTickets.map((ticket) => (
-                        <tr key={ticket.id} className="align-top transition hover:bg-slate-50/80">
-                          <td className="px-5 py-5">
-                            <div className="max-w-xl space-y-2">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="font-semibold text-slate-950">
-                                  {ticket.extracted_fields.subject}
-                                </p>
-                                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                                  {formatDate(ticket.created_at)}
-                                </span>
-                              </div>
-                              <p className="text-sm text-slate-600">
-                                <span className="font-medium text-slate-700">Reporter:</span>{" "}
-                                {ticket.extracted_fields.requester}
-                              </p>
-                              <p className="text-sm leading-6 text-slate-600">
-                                {ticket.extracted_fields.issue_summary}
-                              </p>
-                              <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700 ring-1 ring-slate-200/80">
-                                {ticket.raw_text}
-                              </p>
-                            </div>
-                          </td>
-                          <td className="px-5 py-5">
-                            <span className="inline-flex rounded-full bg-sky-50 px-3 py-1 text-sm font-medium text-sky-700 ring-1 ring-sky-200">
-                              {formatLabel(ticket.category)}
-                            </span>
-                          </td>
-                          <td className="px-5 py-5">
-                            <span
-                              className={`inline-flex rounded-full px-3 py-1 text-sm font-semibold ${priorityClasses(ticket.priority)}`}
-                            >
-                              {formatLabel(ticket.priority)}
-                            </span>
-                          </td>
-                          <td className="px-5 py-5">
-                            <div className="max-w-xl space-y-3">
-                              <div className="flex items-center justify-between gap-3">
-                                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-                                  Suggested reply
-                                </p>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleCopyReply(ticket.id, ticket.suggested_reply)}
-                                  className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
-                                >
-                                  {copiedReplyId === ticket.id ? "Copied!" : "Copy"}
-                                </button>
-                              </div>
-                              <div className="rounded-2xl bg-slate-50 p-4 text-sm leading-7 text-slate-700 ring-1 ring-slate-200/80">
-                                {ticket.suggested_reply}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-5 py-5">
-                            <button
-                              type="button"
-                              onClick={() => void handleDeleteTicket(ticket.id)}
-                              disabled={deletingTicketId === ticket.id}
-                              className="inline-flex items-center justify-center rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition hover:border-rose-300 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {deletingTicketId === ticket.id ? "Deleting..." : "Delete"}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </section>
+          </div>
         </div>
-      </div>
+      ) : null}
     </main>
   );
 }
