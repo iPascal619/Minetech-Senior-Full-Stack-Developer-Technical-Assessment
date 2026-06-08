@@ -1,5 +1,8 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 
 const highlights = [
   {
@@ -49,6 +52,8 @@ const howItWorks = [
 ];
 
 export default function Home() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   return (
     <main className="relative overflow-hidden bg-slate-50">
       <div className="absolute inset-x-0 top-0 -z-10 h-[34rem] bg-[radial-gradient(circle_at_top_left,rgba(14,165,233,0.18),transparent_36%),radial-gradient(circle_at_top_right,rgba(16,185,129,0.16),transparent_32%),linear-gradient(180deg,rgba(248,251,255,0.96),rgba(238,243,249,0.82))]" />
@@ -63,16 +68,17 @@ export default function Home() {
             fill
             priority
             sizes="100vw"
-            className="object-cover object-[92%_center] opacity-60 mix-blend-multiply"
+            className="hidden object-cover object-[92%_center] opacity-60 mix-blend-multiply md:block"
             style={{ animation: "heroFloat 18s ease-in-out infinite" }}
           />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,rgba(14,165,233,0.24),transparent_45%),linear-gradient(90deg,rgba(255,255,255,0.64)_0%,rgba(255,255,255,0.38)_42%,rgba(255,255,255,0.08)_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_left,rgba(14,165,233,0.24),transparent_45%),linear-gradient(90deg,rgba(255,255,255,0.82)_0%,rgba(255,255,255,0.62)_42%,rgba(255,255,255,0.18)_100%)] md:bg-[radial-gradient(circle_at_left,rgba(14,165,233,0.24),transparent_45%),linear-gradient(90deg,rgba(255,255,255,0.64)_0%,rgba(255,255,255,0.38)_42%,rgba(255,255,255,0.08)_100%)]" />
+          <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-slate-50/90 to-transparent md:hidden" />
         </div>
 
         <div className="relative mx-auto flex w-full max-w-7xl flex-col gap-12 px-6 py-8 lg:px-10 lg:py-10">
           <header className="rounded-2xl border border-sky-100/80 bg-white/80 px-5 py-4 shadow-[0_16px_50px_-36px_rgba(14,165,233,0.22)] backdrop-blur-xl sm:px-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="shrink-0">
                 <Image
                   src="/minetech-logo.svg"
                   alt="MINETECH"
@@ -82,7 +88,27 @@ export default function Home() {
                   priority
                 />
               </div>
-              <nav className="flex flex-wrap gap-3 text-sm font-semibold text-slate-700">
+              <button
+                type="button"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-sky-100 bg-white text-slate-700 transition hover:border-sky-200 hover:bg-sky-50 hover:text-slate-950 sm:hidden"
+                aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+                aria-expanded={mobileMenuOpen}
+                onClick={() => setMobileMenuOpen((current) => !current)}
+              >
+                <span className="relative block h-5 w-5">
+                  <span
+                    className={`absolute left-0 top-1 h-0.5 w-5 rounded-full bg-current transition duration-300 ${mobileMenuOpen ? "translate-y-2 rotate-45" : ""}`}
+                  />
+                  <span
+                    className={`absolute left-0 top-2.5 h-0.5 w-5 rounded-full bg-current transition duration-300 ${mobileMenuOpen ? "opacity-0" : ""}`}
+                  />
+                  <span
+                    className={`absolute left-0 top-4 h-0.5 w-5 rounded-full bg-current transition duration-300 ${mobileMenuOpen ? "-translate-y-2 -rotate-45" : ""}`}
+                  />
+                </span>
+              </button>
+
+              <nav className="hidden flex-wrap gap-3 text-sm font-semibold text-slate-700 sm:flex">
                 <Link
                   href="/triage"
                   className="rounded-full border border-sky-100 bg-sky-50 px-4 py-2 transition hover:border-sky-200 hover:bg-sky-100 hover:text-sky-900"
@@ -96,6 +122,22 @@ export default function Home() {
                   Knowledge Base
                 </Link>
               </nav>
+            </div>
+            <div className={`mt-4 grid gap-3 sm:hidden ${mobileMenuOpen ? "grid" : "hidden"}`}>
+              <Link
+                href="/triage"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm font-semibold text-slate-800 transition hover:border-sky-200 hover:bg-sky-100 hover:text-slate-950"
+              >
+                Incident Triage
+              </Link>
+              <Link
+                href="/rag"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-xl border border-sky-100 bg-white px-4 py-3 text-sm font-semibold text-slate-800 transition hover:border-sky-200 hover:bg-sky-50 hover:text-slate-950"
+              >
+                Knowledge Base
+              </Link>
             </div>
           </header>
 
