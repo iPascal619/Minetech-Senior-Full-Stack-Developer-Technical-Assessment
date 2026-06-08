@@ -257,14 +257,14 @@ export async function POST(request: Request) {
       .map((citation, index) => `[${index + 1}] ${citation.filename}\n${citation.excerpt}`)
       .join("\n\n");
 
-    let answer = "The answer is not in the knowledge base.";
+    let answer = "The answer is not in the mining operations knowledge base.";
 
     try {
       const result = await generateResponse(
         `Context:\n${context}\n\nQuestion: ${question}\n\nAnswer using only the context.`,
         {
           systemPrompt:
-            "You are a retrieval-augmented assistant for the MineTech knowledge base. Use only the provided context.",
+            "You are a retrieval-augmented assistant for the MineTech mining operations knowledge base. Use only the provided context.",
           temperature: 0.2,
           timeoutMs: 60_000,
         },
@@ -272,10 +272,10 @@ export async function POST(request: Request) {
 
       answer = cleanText(result.text, answer);
     } catch {
-      answer = "The answer is not in the knowledge base.";
+      answer = "The answer is not in the mining operations knowledge base.";
     }
 
-    const grounded = !/not in the knowledge base/i.test(answer);
+    const grounded = !/not in the (?:mining operations )?knowledge base/i.test(answer);
     const stored = await storeConversation(question, answer, grounded ? citations : []);
 
     return Response.json(
@@ -291,7 +291,13 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     return Response.json(
-      { success: false, error: error instanceof Error ? error.message : "Failed to answer the question." },
+      {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to answer the mining operations question.",
+      },
       { status: 500 },
     );
   }

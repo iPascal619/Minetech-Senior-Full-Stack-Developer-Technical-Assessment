@@ -2,33 +2,48 @@ import Link from "next/link";
 
 const highlights = [
   {
-    label: "Local LLM",
-    value: "Phi-3 Mini via Ollama",
+    label: "Mining Operations",
+    value: "Shift logs, equipment faults, and site incidents in one flow.",
   },
   {
-    label: "Database",
-    value: "PostgreSQL knowledge base",
+    label: "Site Intelligence",
+    value: "Local Ollama and PostgreSQL keep every answer grounded.",
   },
   {
-    label: "Stack",
-    value: "Next.js App Router + TypeScript + TailwindCSS",
+    label: "Compliance Ready",
+    value: "Traceable records for safety, audit, and production follow-up.",
   },
 ];
 
 const capabilities = [
   {
-    title: "Smart Intake Triage",
+    title: "Operational Incident Triage",
     description:
-      "Classify support tickets, extract key fields, and generate a suggested reply with a JSON-first workflow.",
+      "Classify site reports, extract the worker, equipment, and urgency, and save a structured incident record.",
     href: "/triage",
-    accent: "from-sky-500 to-cyan-500",
+    accent: "from-red-500 to-orange-500",
   },
   {
-    title: "RAG Chatbot",
+    title: "Mining Operations Knowledge Base",
     description:
-      "Upload documents, retrieve matching context from PostgreSQL, and ask grounded questions with citations.",
+      "Ingest safety manuals, inspections, and shift notes, then ask cited questions against the documents.",
     href: "/rag",
     accent: "from-emerald-500 to-teal-500",
+  },
+];
+
+const howItWorks = [
+  {
+    title: "Triage flow",
+    description:
+      "Crews paste site reports. Ollama classifies the incident, PostgreSQL stores the record, and the dashboard keeps the shift team aligned.",
+    steps: ["Input", "Ollama", "PostgreSQL", "Dashboard"],
+  },
+  {
+    title: "RAG flow",
+    description:
+      "Documents move into PostgreSQL, retrieval surfaces the right passages, Ollama answers, and the user sees the cited result.",
+    steps: ["Documents", "PostgreSQL", "Retrieval", "Ollama", "Cited Answer"],
   },
 ];
 
@@ -43,40 +58,40 @@ export default function Home() {
         <header className="flex flex-col gap-4 rounded-[1.75rem] border border-white/70 bg-white/75 px-6 py-5 shadow-[0_16px_60px_-38px_rgba(15,23,42,0.65)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
-              MineTech Assessment
+              MineTech Intelligence for African Mine Sites
             </p>
             <h1 className="mt-2 text-xl font-semibold text-slate-950">
-              Smart support workflows on a local stack.
+              Mining operations intelligence on a local stack.
             </h1>
           </div>
           <nav className="flex flex-wrap gap-3 text-sm font-medium text-slate-600">
             <Link
               href="/triage"
-              className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
+              className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700"
             >
-              Triage Dashboard
+              Incident Triage
             </Link>
             <Link
               href="/rag"
               className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
             >
-              RAG Chatbot
+              Knowledge Base
             </Link>
           </nav>
         </header>
 
-        <div className="grid flex-1 items-center gap-10 py-12 lg:grid-cols-[1.1fr_0.9fr] lg:py-16">
+        <div className="grid flex-1 items-start gap-10 py-12 lg:grid-cols-[1.1fr_0.9fr] lg:py-16">
           <div className="max-w-2xl">
             <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-medium text-sky-700 shadow-sm">
-              Two production-style use cases, one clean interface
+              Built for site reports, safety work, and production follow-up
             </span>
             <h2 className="mt-6 text-5xl font-semibold tracking-tight text-slate-950 sm:text-6xl">
-              MineTech Assessment
+              Mining operations intelligence on a local stack.
             </h2>
             <p className="mt-6 max-w-xl text-lg leading-8 text-slate-600">
-              Build support triage and grounded document Q&A on top of a local Ollama Phi-3 Mini
-              model and PostgreSQL. The app keeps the UX simple, but the back-end flow is
-              structured, resilient, and easy to inspect.
+              Built for African mine sites that need fast incident triage, equipment fault tracking,
+              and cited answers from safety documents. The platform keeps each decision close to
+              the field, the database, and the model.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-4">
@@ -84,13 +99,13 @@ export default function Home() {
                 href="/triage"
                 className="inline-flex items-center justify-center rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800"
               >
-                Open Triage
+                Open Incident Triage
               </Link>
               <Link
                 href="/rag"
                 className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800"
               >
-                Open RAG Chat
+                Open Knowledge Base
               </Link>
             </div>
 
@@ -124,24 +139,54 @@ export default function Home() {
                   href={card.href}
                   className="mt-6 inline-flex items-center text-sm font-semibold text-slate-900 transition group-hover:text-slate-700"
                 >
-                  Launch experience
+                  Open workflow
                   <span className="ml-2 transition-transform group-hover:translate-x-1">-&gt;</span>
                 </Link>
               </article>
             ))}
-
-            <div className="rounded-[2rem] border border-slate-200 bg-slate-950 px-6 py-6 text-slate-100 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.8)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
-                Architecture notes
-              </p>
-              <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
-                <li>Smart triage requests JSON-only output and falls back when parsing fails.</li>
-                <li>RAG retrieval uses simple PostgreSQL text matching with citation tracking.</li>
-                <li>Both flows handle model and database failures without crashing the UI.</li>
-              </ul>
-            </div>
           </div>
         </div>
+
+        <section className="grid gap-6 pb-6 lg:grid-cols-2">
+          {howItWorks.map((flow) => (
+            <article
+              key={flow.title}
+              className="rounded-[2rem] border border-white/70 bg-white/85 p-6 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.65)] backdrop-blur-xl"
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+                How it works
+              </p>
+              <h3 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                {flow.title}
+              </h3>
+              <p className="mt-3 text-sm leading-7 text-slate-600">{flow.description}</p>
+
+              <div className="mt-5 flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-700">
+                {flow.steps.map((step, index) => (
+                  <span key={step} className="flex items-center gap-2">
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2">
+                      {step}
+                    </span>
+                    {index < flow.steps.length - 1 ? (
+                      <span className="text-slate-400">→</span>
+                    ) : null}
+                  </span>
+                ))}
+              </div>
+            </article>
+          ))}
+        </section>
+
+        <section className="rounded-[2rem] border border-slate-200 bg-slate-950 px-6 py-6 text-slate-100 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.8)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
+            Operational notes
+          </p>
+          <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
+            <li>Operational incidents keep the reporter, site, and equipment context together.</li>
+            <li>Mining documents stay grounded with PostgreSQL retrieval and citations.</li>
+            <li>Model and database failures surface clearly so crews can retry without losing context.</li>
+          </ul>
+        </section>
       </section>
     </main>
   );

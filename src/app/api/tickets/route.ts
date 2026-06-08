@@ -122,9 +122,9 @@ function fallbackFields(rawText: string): TicketFields {
   const emailMatch = rawText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
 
   return {
-    subject: truncate(firstLine ?? rawText.slice(0, 120) ?? "Support request", 120),
-    requester: truncate(requesterMatch?.[1] ?? emailMatch?.[0] ?? "Unknown", 80),
-    issue_summary: truncate(rawText, 240) || "No issue summary provided.",
+    subject: truncate(firstLine ?? rawText.slice(0, 120) ?? "Operational incident", 120),
+    requester: truncate(requesterMatch?.[1] ?? emailMatch?.[0] ?? "Unknown reporter", 80),
+    issue_summary: truncate(rawText, 240) || "No incident summary provided.",
   };
 }
 
@@ -205,19 +205,19 @@ function serializeTicket(row: TicketRow) {
 
 async function classifyTicket(rawText: string) {
   const prompt = [
-    "Classify the support ticket and return JSON only.",
+    "Classify the operational incident and return JSON only.",
     'Schema: {"category":"...","priority":"...","extracted_fields":{"subject":"...","requester":"...","issue_summary":"..."},"suggested_reply":"..."}',
     "Allowed categories: billing, technical_issue, account_access, bug_report, feature_request, security, general, other.",
     "Allowed priorities: low, medium, high, urgent.",
     "Do not add markdown or extra commentary.",
-    "Ticket text:",
+    "Incident report text:",
     rawText,
   ].join("\n\n");
 
   try {
     const response = await generateResponse(prompt, {
       systemPrompt:
-        "You are a support triage engine. You must output JSON only and never include extra prose.",
+        "You are an operational incident triage engine. You must output JSON only and never include extra prose.",
       format: "json",
       temperature: 0.1,
       timeoutMs: 60_000,
@@ -227,12 +227,17 @@ async function classifyTicket(rawText: string) {
 
     return {
       triage: normalizeTriage(rawText, parsed),
-      warning: parsed ? null : "The LLM returned malformed JSON, so fallback values were used for some fields.",
+      warning: parsed
+        ? null
+        : "The LLM returned malformed JSON, so fallback values were used for some incident fields.",
     };
   } catch (error) {
     return {
       triage: normalizeTriage(rawText, null),
-      warning: error instanceof Error ? `Ollama unavailable or returned an error: ${error.message}` : "Ollama unavailable or returned an error.",
+      warning:
+        error instanceof Error
+          ? `Ollama unavailable or returned an error: ${error.message}`
+          : "Ollama unavailable or returned an error.",
     };
   }
 }
@@ -248,7 +253,7 @@ export async function GET() {
     return Response.json({ tickets: result.rows.map(serializeTicket) });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : "Failed to load tickets." },
+      { error: error instanceof Error ? error.message : "Failed to load operational incidents." },
       { status: 500 },
     );
   }
@@ -259,7 +264,7 @@ export async function POST(request: Request) {
   const rawText = cleanText(body?.rawText ?? body?.raw_text, "");
 
   if (!rawText) {
-    return Response.json({ error: "rawText is required." }, { status: 400 });
+    return Response.json({ error: "Incident report text is required." }, { status: 400 });
   }
 
   const { triage, warning } = await classifyTicket(rawText);
@@ -284,7 +289,8 @@ export async function POST(request: Request) {
     return Response.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Failed to save ticket.",
+        error:
+          error instanceof Error ? error.message : "Failed to save operational incident.",
         triage,
         warnings: warning ? [warning] : [],
       },
