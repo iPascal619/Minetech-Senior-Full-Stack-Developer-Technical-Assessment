@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { query } from "@/lib/db";
 import { generateResponse } from "@/lib/ollama";
+import { ensureTicketSchema } from "@/lib/ticket-schema";
+import { serializeTicket, type TicketFields, type TicketRow } from "@/lib/ticket-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,27 +13,11 @@ type TicketBody = {
   raw_text?: unknown;
 };
 
-type TicketFields = {
-  subject: string;
-  requester: string;
-  issue_summary: string;
-};
-
 type TriageResult = {
   category: string;
   priority: string;
   extracted_fields: TicketFields;
   suggested_reply: string;
-};
-
-type TicketRow = {
-  id: string;
-  raw_text: string;
-  category: string;
-  priority: string;
-  extracted_fields: unknown;
-  suggested_reply: string;
-  created_at: string | Date;
 };
 
 const CATEGORY_SET = new Set([
@@ -181,28 +167,6 @@ function normalizeTriage(rawText: string, parsed: Record<string, unknown> | null
   };
 }
 
-function serializeTicket(row: TicketRow) {
-  const fallback = fallbackFields(row.raw_text);
-  const extractedFields =
-    row.extracted_fields && typeof row.extracted_fields === "object" && !Array.isArray(row.extracted_fields)
-      ? (row.extracted_fields as Record<string, unknown>)
-      : {};
-
-  return {
-    id: row.id,
-    raw_text: row.raw_text,
-    category: row.category,
-    priority: row.priority,
-    extracted_fields: {
-      subject: cleanText(extractedFields.subject, fallback.subject),
-      requester: cleanText(extractedFields.requester, fallback.requester),
-      issue_summary: cleanText(extractedFields.issue_summary, fallback.issue_summary),
-    },
-    suggested_reply: row.suggested_reply,
-    created_at: new Date(row.created_at).toISOString(),
-  };
-}
-
 async function classifyTicket(rawText: string) {
   const prompt = [
     "Classify the operational incident and return JSON only.",
@@ -244,8 +208,10 @@ async function classifyTicket(rawText: string) {
 
 export async function GET() {
   try {
+    await ensureTicketSchema();
+
     const result = await query<TicketRow>(
-      `SELECT id, raw_text, category, priority, extracted_fields, suggested_reply, created_at
+      `SELECT id, raw_text, category, priority, status, assignee, extracted_fields, suggested_reply, created_at, updated_at
        FROM tickets
        ORDER BY created_at DESC`,
     );
@@ -260,6 +226,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  await ensureTicketSchema();
+
   const body = (await request.json().catch(() => null)) as TicketBody | null;
   const rawText = cleanText(body?.rawText ?? body?.raw_text, "");
 
@@ -271,10 +239,17 @@ export async function POST(request: Request) {
 
   try {
     const saved = await query<TicketRow>(
-      `INSERT INTO tickets (id, raw_text, category, priority, extracted_fields, suggested_reply, created_at)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6, NOW())
-       RETURNING id, raw_text, category, priority, extracted_fields, suggested_reply, created_at`,
-      [randomUUID(), rawText, triage.category, triage.priority, JSON.stringify(triage.extracted_fields), triage.suggested_reply],
+      `INSERT INTO tickets (id, raw_text, category, priority, status, assignee, extracted_fields, suggested_reply, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, 'open', '', $5::jsonb, $6, NOW(), NOW())
+       RETURNING id, raw_text, category, priority, status, assignee, extracted_fields, suggested_reply, created_at, updated_at`,
+      [
+        randomUUID(),
+        rawText,
+        triage.category,
+        triage.priority,
+        JSON.stringify(triage.extracted_fields),
+        triage.suggested_reply,
+      ],
     );
 
     return Response.json(
