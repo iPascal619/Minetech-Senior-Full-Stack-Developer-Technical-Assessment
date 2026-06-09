@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local submission artifacts
+/9821 (2).jpg
+/image.jpg
+/public/minetech-hero.jpg
+/DECISION_MEMO.md

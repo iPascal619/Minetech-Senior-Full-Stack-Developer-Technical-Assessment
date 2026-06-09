@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "jest"
+    "test": "jest",
+    "benchmark:ai": "node scripts/run-ai-benchmarks.mjs"
   },
   "jest": {
     "preset": "ts-jest",

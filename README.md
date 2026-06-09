@@ -190,6 +190,7 @@ Open `http://localhost:3000`.
 - `npm run start` - Start the production server.
 - `npm run lint` - Run ESLint.
 - `npm test` - Run the Jest test suite.
+- `npm run benchmark:ai` - Run the local triage and RAG benchmark harness against a live app.
 
 ## API Routes
 

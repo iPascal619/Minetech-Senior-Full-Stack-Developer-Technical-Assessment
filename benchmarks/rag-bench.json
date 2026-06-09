@@ -1,0 +1,28 @@
+{
+  "documents": [
+    {
+      "filename": "benchmark-safety-plan.txt",
+      "content": "MineTech benchmark safety plan for Shaft Z9. If a worker reports a roof fall, remove the team from the area, notify the shift supervisor, and contact site safety immediately. The response plan names a unique phrase: crimson ladder protocol."
+    },
+    {
+      "filename": "benchmark-ventilation-sop.txt",
+      "content": "MineTech benchmark ventilation SOP for Level 3. If gas readings rise above threshold, shut the section down, verify airflow, and restart the fans before re-entry. The unique phrase is cobalt airflow checkpoint."
+    }
+  ],
+  "cases": [
+    {
+      "name": "grounded safety plan question",
+      "question": "What should the crew do after a roof fall at Shaft Z9?",
+      "expectGrounded": true,
+      "expectCitationFilenameContains": "benchmark-safety-plan.txt",
+      "expectAnswerContains": "crimson ladder protocol"
+    },
+    {
+      "name": "not in knowledge base",
+      "question": "What is the cafeteria menu for 2045?",
+      "expectGrounded": false,
+      "expectNotInKnowledgeBase": true,
+      "expectAnswerContains": "not in the knowledge base"
+    }
+  ]
+}

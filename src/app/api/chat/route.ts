@@ -40,6 +40,15 @@ type RetrievedCitations = {
   retrievalMethod: RetrievalMethod;
 };
 
+type GenerationResponseMeta = {
+  raw?: {
+    model?: string;
+    total_duration?: number;
+    prompt_eval_count?: number;
+    eval_count?: number;
+  } | null;
+};
+
 function truncate(value: string, maxLength: number) {
   const compact = value.replace(/\s+/g, " ").trim();
 
@@ -253,6 +262,46 @@ function fallbackAnswer() {
   return "The answer is not in the knowledge base.";
 }
 
+function formatDuration(rawDuration?: number) {
+  if (typeof rawDuration !== "number" || !Number.isFinite(rawDuration)) {
+    return null;
+  }
+
+  return Math.round(rawDuration / 1_000_000);
+}
+
+function logRagRequest(details: {
+  stage: "no_context" | "success" | "generation_failed" | "error";
+  questionLength: number;
+  retrievalMethod?: RetrievalMethod;
+  citationsCount?: number;
+  grounded?: boolean;
+  notInKnowledgeBase?: boolean;
+  stored?: boolean;
+  response?: GenerationResponseMeta;
+  elapsedMs: number;
+  errorMessage?: string;
+}) {
+  console.info(
+    JSON.stringify({
+      event: "rag_request",
+      stage: details.stage,
+      questionLength: details.questionLength,
+      retrievalMethod: details.retrievalMethod ?? null,
+      citationsCount: details.citationsCount ?? null,
+      grounded: details.grounded ?? null,
+      notInKnowledgeBase: details.notInKnowledgeBase ?? null,
+      stored: details.stored ?? null,
+      model: details.response?.raw?.model ?? "unknown",
+      durationMs: formatDuration(details.response?.raw?.total_duration),
+      promptEvalCount: details.response?.raw?.prompt_eval_count ?? null,
+      evalCount: details.response?.raw?.eval_count ?? null,
+      elapsedMs: details.elapsedMs,
+      errorMessage: details.errorMessage ?? null,
+    }),
+  );
+}
+
 export async function POST(request: Request) {
   const rateLimit = await applyRateLimit(request, {
     bucket: "/api/chat",
@@ -276,6 +325,7 @@ export async function POST(request: Request) {
   }
 
   const encoder = new TextEncoder();
+  const requestStartedAt = Date.now();
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -291,6 +341,17 @@ export async function POST(request: Request) {
         if (citations.length === 0) {
           const answer = fallbackAnswer();
           const stored = await storeConversation(question, answer, []);
+
+          logRagRequest({
+            stage: "no_context",
+            questionLength: question.length,
+            retrievalMethod,
+            citationsCount: 0,
+            grounded: false,
+            notInKnowledgeBase: true,
+            stored,
+            elapsedMs: Date.now() - requestStartedAt,
+          });
 
           send("meta", {
             citations: [],
@@ -329,6 +390,7 @@ export async function POST(request: Request) {
         const prompt = `Context:\n${context}\n\nQuestion: ${question}\n\nAnswer using only the context.`;
 
         let answer = "";
+        let generationMeta: GenerationResponseMeta | null = null;
 
         try {
           const result = await generateResponseStream(prompt, {
@@ -343,6 +405,7 @@ export async function POST(request: Request) {
           });
 
           answer = result.text || answer;
+          generationMeta = result;
         } catch (error) {
           if (!answer.trim()) {
             answer = fallbackAnswer();
@@ -362,6 +425,18 @@ export async function POST(request: Request) {
 
         const stored = await storeConversation(question, answer, citations);
 
+        logRagRequest({
+          stage: "success",
+          questionLength: question.length,
+          retrievalMethod,
+          citationsCount: citations.length,
+          grounded: true,
+          notInKnowledgeBase: false,
+          stored,
+          response: generationMeta ?? undefined,
+          elapsedMs: Date.now() - requestStartedAt,
+        });
+
         send("done", {
           success: true,
           answer,
@@ -378,6 +453,18 @@ export async function POST(request: Request) {
             error instanceof Error
               ? error.message
               : "Failed to answer the mining operations question.",
+        });
+
+        logRagRequest({
+          stage: "error",
+          questionLength: question.length,
+          retrievalMethod: undefined,
+          citationsCount: 0,
+          grounded: false,
+          notInKnowledgeBase: false,
+          stored: false,
+          elapsedMs: Date.now() - requestStartedAt,
+          errorMessage: error instanceof Error ? error.message : "Failed to answer the mining operations question.",
         });
         controller.close();
       }
