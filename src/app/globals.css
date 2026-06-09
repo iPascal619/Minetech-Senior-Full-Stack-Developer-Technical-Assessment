@@ -20,10 +20,7 @@ html {
 body {
   min-height: 100%;
   margin: 0;
-  background:
-    radial-gradient(circle at top left, rgba(14, 165, 233, 0.16), transparent 32%),
-    radial-gradient(circle at top right, rgba(16, 185, 129, 0.12), transparent 28%),
-    linear-gradient(180deg, #f8fbff 0%, #eef3f9 100%);
+  background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), "Geist", sans-serif;
 }
