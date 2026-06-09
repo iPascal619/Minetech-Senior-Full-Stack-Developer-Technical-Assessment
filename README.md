@@ -1,192 +1,284 @@
-# MineTech — Mining Operations Intelligence Platform
+# MineTech
 
-A full-stack application built for the MineTech Senior Full-Stack Developer 
-Technical Assessment. Two production-style AI workflows running entirely on 
-a self-hosted local LLM — no external APIs, no cloud model costs.
+MineTech is a mining operations intelligence platform built for the Senior Full-Stack Developer technical assessment. It combines two local AI workflows with PostgreSQL persistence and a Next.js App Router frontend:
 
-Live demo: https://minetech-senior-full-stack-develope.vercel.app
-(Note: Live demo shows UI only. Full functionality requires local Ollama 
-and PostgreSQL — see setup instructions below.)
+1. Operational incident triage for mining site reports.
+2. A retrieval-augmented knowledge base for safety and operations documents.
 
----
+The app is designed to run on a local stack with no external model APIs.
 
-## What it does
+## Highlights
 
-### Use Case 1 — Operational Incident Triage
-Paste a raw site report or equipment fault description. The app sends it 
-to a locally running Phi-3 Mini model via Ollama, classifies the incident 
-by category and priority, extracts the worker, equipment, and issue summary, 
-drafts a suggested response, and saves everything to PostgreSQL. The 
-dashboard is filterable by category and priority with full text search.
-
-### Use Case 2 — Mining Operations Knowledge Base (RAG)
-Upload safety manuals, inspection reports, or shift notes. Ask questions 
-against the documents. The app retrieves relevant chunks from PostgreSQL, 
-sends context and question to Ollama, returns a grounded answer with 
-citations, and clearly states when the answer is not in the knowledge base.
-
----
+- Triage raw incident text into structured records with a local Ollama model.
+- Persist triaged incidents in PostgreSQL and browse them in a filterable dashboard.
+- Ingest documents into a knowledge base with PostgreSQL + pgvector.
+- Ask grounded questions against indexed site documents.
+- See citations inline and open the cited source document from the chat UI.
+- Save chat transcripts locally in the browser and start a fresh chat.
+- Rate limit the API routes to avoid accidental bursts.
 
 ## Tech Stack
 
-- **Frontend** — Next.js 14 App Router, TypeScript, TailwindCSS
-- **Backend** — Next.js API Routes, Node.js
-- **Database** — PostgreSQL
-- **LLM** — Phi-3 Mini via Ollama (self-hosted, runs locally)
+- Next.js 16 App Router
+- React 19
+- TypeScript
+- Tailwind CSS v4
+- PostgreSQL
+- pgvector
+- Ollama
 
----
+## Repository Layout
+
+```text
+src/
+  app/
+    page.tsx                  Home page / product overview
+    layout.tsx                Root layout and metadata
+    globals.css                Global styles and theme tokens
+    global-error.tsx           Global error boundary
+    api/
+      chat/route.ts            RAG chat API
+      documents/route.ts       Document list + upload API
+      documents/[id]/route.ts  Document detail + delete API
+      tickets/route.ts         Incident triage list + create API
+      tickets/[id]/route.ts     Incident delete API
+    rag/
+      page.tsx                 RAG page shell
+      RagClient.tsx            RAG UI and client logic
+    triage/
+      page.tsx                 Triage page shell
+      TriageClient.tsx         Triage UI and client logic
+      TriageDashboard.tsx      Dashboard and incident details
+  lib/
+    chat-stream.ts             SSE stream parser for Ollama chat responses
+    db.ts                      PostgreSQL pool and helpers
+    input.ts                   Sanitization and validation helpers
+    normalization.ts           Text normalization helpers
+    ollama.ts                  Ollama request helpers
+    rate-limit.ts              API rate limiting logic
+    ticket-schema.ts           Triage schema definitions
+    ticket-types.ts            Shared ticket types and helpers
+    triage-schema.ts           Triage response schema
+migrations/
+  20260609_add_api_rate_limits.sql
+  20260609_add_pgvector.sql
+```
+
+## Features
+
+### Incident triage
+
+- Paste a raw incident report.
+- The app asks Ollama to classify the report and extract structured fields.
+- Results are saved to PostgreSQL.
+- The dashboard supports filtering, search, row actions, and incident detail viewing.
+
+### Retrieval-augmented knowledge base
+
+- Upload `.txt` or `.pdf` documents or paste text directly.
+- Documents are stored in PostgreSQL.
+- Embeddings are generated locally with Ollama and stored in pgvector.
+- Questions are answered from indexed documents when possible.
+- Responses include citations and a source viewer for the cited document.
+- If no relevant context is found, the assistant clearly says so.
+
+### Chat workflow improvements
+
+- The chat transcript scrolls inside the card instead of stretching the page.
+- You can store a chat locally in the browser.
+- You can start a new chat without losing the existing stored transcript.
+- Internal SSE status events are hidden from the UI.
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 18.18+ or 20+
 - PostgreSQL 14+
-- Ollama installed — https://ollama.com/download
+- Ollama installed locally
+- The `psql` CLI if you want to run the SQL migrations manually
 
----
-
-## Setup Instructions
+## Local Setup
 
 ### 1. Clone the repository
 
+```bash
 git clone https://github.com/iPascal619/Minetech-Senior-Full-Stack-Developer-Technical-Assessment.git
 cd Minetech-Senior-Full-Stack-Developer-Technical-Assessment
+```
 
 ### 2. Install dependencies
 
+```bash
 npm install
+```
 
-### 3. Install and start Ollama
+On Windows PowerShell, use `npm.cmd` if your shell does not resolve `npm` directly.
 
-Download Ollama from https://ollama.com/download and install it.
-Then pull the Phi-3 Mini model:
+### 3. Install Ollama models
 
-ollama pull phi3:mini
+Install Ollama from https://ollama.com/download, then pull the two models used by the app:
 
-Ollama will start automatically on http://localhost:11434
+```bash
+ollama pull qwen2.5:7b
+ollama pull nomic-embed-text
+```
 
-### 4. Set up PostgreSQL
+The app uses:
 
-Create the database and tables:
+- `qwen2.5:7b` for triage and answer generation
+- `nomic-embed-text` for document embeddings
 
+Ollama runs on `http://localhost:11434` by default.
+
+### 4. Create the database
+
+Create the database and apply the migrations:
+
+```bash
 psql -U postgres -W
+```
 
-Then run:
+Then in `psql`:
 
+```sql
 CREATE DATABASE minetech;
 \c minetech
+\i migrations/20260609_add_api_rate_limits.sql
+\i migrations/20260609_add_pgvector.sql
+```
 
-CREATE TABLE tickets (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  raw_text TEXT NOT NULL,
-  category VARCHAR(100),
-  priority VARCHAR(50),
-  extracted_fields JSONB,
-  suggested_reply TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
-);
+If your base schema has not been created yet, make sure the application tables exist before running the app. The project expects these core tables:
 
-CREATE TABLE documents (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  filename VARCHAR(255),
-  content TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
-CREATE TABLE conversations (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  question TEXT NOT NULL,
-  answer TEXT NOT NULL,
-  citations JSONB,
-  created_at TIMESTAMP DEFAULT NOW()
-);
+- `tickets`
+- `documents`
+- `conversations`
+- `api_rate_limits`
 
 ### 5. Configure environment variables
 
-Copy .env.example to .env.local:
+Copy the example file:
 
+```bash
 cp .env.example .env.local
+```
 
-Update .env.local with your values:
+Then review `.env.local`:
 
-DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/minetech
+```env
+DATABASE_URL=postgresql://postgres:pascal123@localhost:5432/minetech
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=phi3:mini
+OLLAMA_MODEL=qwen2.5:7b
+```
 
-### 6. Run the development server
+Optional:
 
+```env
+OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+```
+
+### 6. Start the app
+
+```bash
 npm run dev
+```
 
-Open http://localhost:3000
+Open `http://localhost:3000`.
 
----
+## Available Scripts
 
-## How it works
+- `npm run dev` - Start the Next.js development server.
+- `npm run build` - Build the production app.
+- `npm run start` - Start the production server.
+- `npm run lint` - Run ESLint.
+- `npm test` - Run the Jest test suite.
+
+## API Routes
+
+### Triage
+
+- `GET /api/tickets` - List triaged incidents.
+- `POST /api/tickets` - Submit raw incident text for structured triage.
+- `DELETE /api/tickets/[id]` - Delete a triaged incident.
+
+### Knowledge base
+
+- `GET /api/documents` - List indexed documents.
+- `POST /api/documents` - Upload a document or paste text content.
+- `GET /api/documents/[id]` - Fetch a document for citation/source viewing.
+- `DELETE /api/documents/[id]` - Delete a document.
+- `POST /api/chat` - Stream a RAG answer using Server-Sent Events.
+
+## Data Flow Overview
 
 ### Triage flow
-1. User pastes a raw incident report
-2. API sends text to Ollama with a JSON-only prompt
-3. Phi-3 Mini classifies category, priority, extracts fields, drafts reply
-4. App handles malformed JSON gracefully with fallback values
-5. Structured result saved to PostgreSQL
-6. Dashboard displays filterable incident records
+
+1. A user pastes a raw incident report.
+2. The server sends the text to Ollama with a structured prompt.
+3. The model returns a triage payload.
+4. The app normalizes the response and falls back when the model output is incomplete.
+5. The incident is saved in PostgreSQL.
+6. The dashboard displays the new record.
 
 ### RAG flow
-1. User uploads documents to PostgreSQL knowledge base
-2. User asks a question
-3. App retrieves relevant chunks using PostgreSQL text matching
-4. Retrieved context + question sent to Ollama
-5. Phi-3 Mini answers grounded in context with citations
-6. If no relevant context found — clearly states not in knowledge base
 
----
+1. A user uploads a document or pastes report text.
+2. The content is stored in PostgreSQL.
+3. Ollama generates an embedding with `nomic-embed-text`.
+4. The embedding is saved into pgvector.
+5. A question is submitted to `/api/chat`.
+6. The app searches for relevant content and streams a grounded answer.
+7. Citations can be opened to inspect the source document.
 
-## Design decisions
+## Database Notes
 
-See DECISION_MEMO.md for full reasoning on model choice, 
-retrieval strategy, hallucination handling, and ambiguous spec decisions.
+The project uses two database migrations:
 
----
+- `20260609_add_api_rate_limits.sql` creates the `api_rate_limits` table used by the rate limiter.
+- `20260609_add_pgvector.sql` enables the `vector` extension and adds a `vector(768)` embedding column to `documents`.
 
-## Project structure
+The document index uses an IVFFlat index for cosine similarity search.
 
-src/
-  app/
-    layout.tsx                 — Root layout with fonts and metadata
-    page.tsx                   — Home page with workflow overview
-    globals.css                — Global styles
-    global-error.tsx           — Global error boundary
-    api/
-      tickets/
-        route.ts               — Triage API (GET, POST)
-        [id]/
-          route.ts             — Triage API (DELETE by ID)
-      documents/
-        route.ts               — Document API (GET, POST)
-        [id]/
-          route.ts             — Document API (DELETE by ID)
-      chat/
-        route.ts               — RAG chat API (POST)
-    triage/
-      page.tsx                 — Triage page (server component)
-      TriageClient.tsx         — Triage dashboard (client component)
-    rag/
-      page.tsx                 — RAG page (server component)
-      RagClient.tsx            — Knowledge base chat (client component)
-  lib/
-    db.ts                      — PostgreSQL connection pool
-    ollama.ts                  — Ollama API utility
-    ticket-schema.ts           — Ticket validation schema
-    ticket-types.ts            — Shared TypeScript types
+## Troubleshooting
 
----
+### `npm` not found on Windows PowerShell
 
-## Running the Loom demo
+Use `npm.cmd` instead:
 
-To reproduce the demo shown in the submission video:
+```bash
+npm.cmd run build
+```
 
-1. Start Ollama (runs automatically after installation)
-2. Run npm run dev
-3. Navigate to /triage and submit a mining incident report
-4. Navigate to /rag, upload a document, and ask a question
-5. Observe grounded answer with citations
-6. Ask an out-of-scope question to see "not in knowledge base" response
+### `CREATE EXTENSION IF NOT EXISTS vector` fails
+
+- Make sure PostgreSQL is running.
+- Confirm you are connected to the `minetech` database.
+- Ensure the `pgvector` extension is installed in your PostgreSQL instance.
+
+### Ollama requests fail
+
+- Verify Ollama is running on `http://localhost:11434`.
+- Make sure `phi3:mini` and `nomic-embed-text` are available locally.
+
+### Citations show but do not open
+
+- The app opens citation sources from `/api/documents/[id]`.
+- If the source viewer does not open, check that the document still exists in PostgreSQL.
+
+### RAG answers always say the content is missing
+
+- Confirm the document has been indexed.
+- Confirm the embedding was stored successfully.
+- Confirm the relevant document content actually contains the query terms.
+
+## Notes
+
+- The app is designed to work best when PostgreSQL and Ollama are both local and available.
+- Chat transcripts can be stored locally in the browser from the RAG page.
+- This repository keeps the AI workflows on-device as much as possible.
+
+## Deployment
+
+The application can be deployed as a standard Next.js app, but full functionality depends on a reachable PostgreSQL instance and Ollama endpoint. If you deploy the frontend separately from the local services, update the environment variables accordingly.
+
+## License
+
+No license file is included in this assessment repository.

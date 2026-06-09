@@ -34,7 +34,7 @@ type OllamaEmbeddingResult = {
 function getOllamaConfig() {
   return {
     baseUrl: (process.env.OLLAMA_BASE_URL ?? "http://localhost:11434").replace(/\/$/, ""),
-    model: process.env.OLLAMA_MODEL ?? "phi3:mini",
+    model: process.env.OLLAMA_MODEL ?? "qwen2.5:7b",
     embeddingModel: process.env.OLLAMA_EMBEDDING_MODEL ?? "nomic-embed-text",
   };
 }
