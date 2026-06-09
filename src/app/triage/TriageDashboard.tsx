@@ -566,6 +566,7 @@ export default function TriageDashboard() {
       modalCloseTimeoutRef.current = null;
     }
 
+    setSelectedIncidentId(null);
     setFormError(null);
     setStatusMessage(null);
     setModalOpen(true);
@@ -972,6 +973,20 @@ export default function TriageDashboard() {
   const selectedTickets = tickets.filter((ticket) => selectedTicketIds.includes(ticket.id));
   const selectedCount = selectedTickets.length;
   const selectedIncident = selectedIncidentId ? tickets.find((ticket) => ticket.id === selectedIncidentId) ?? null : null;
+
+  useEffect(() => {
+    if (!selectedIncident) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [selectedIncident]);
+
   const overview = tickets.reduce(
     (accumulator, ticket) => {
       accumulator.total += 1;
@@ -1021,22 +1036,22 @@ export default function TriageDashboard() {
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-[16px] border-[0.5px] border-slate-200 bg-white px-4 py-4">
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
+            <div className="rounded-[16px] border-[0.5px] border-slate-200 bg-white px-3 py-3 sm:px-4 sm:py-4">
               <p className="text-[11px] font-medium tracking-[0.5px] text-slate-500">Total incidents</p>
-              <p className="mt-2 text-[30px] font-medium leading-none text-slate-950">{overview.total}</p>
+              <p className="mt-2 text-[24px] font-medium leading-none text-slate-950 sm:text-[30px]">{overview.total}</p>
             </div>
-            <div className="rounded-[16px] border-[0.5px] border-slate-200 bg-white px-4 py-4">
+            <div className="rounded-[16px] border-[0.5px] border-slate-200 bg-white px-3 py-3 sm:px-4 sm:py-4">
               <p className="text-[11px] font-medium tracking-[0.5px] text-slate-500">Open queue</p>
-              <p className="mt-2 text-[30px] font-medium leading-none text-slate-950">{overview.open}</p>
+              <p className="mt-2 text-[24px] font-medium leading-none text-slate-950 sm:text-[30px]">{overview.open}</p>
             </div>
-            <div className="rounded-[16px] border-[0.5px] border-slate-200 bg-white px-4 py-4">
+            <div className="rounded-[16px] border-[0.5px] border-slate-200 bg-white px-3 py-3 sm:px-4 sm:py-4">
               <p className="text-[11px] font-medium tracking-[0.5px] text-slate-500">In progress</p>
-              <p className="mt-2 text-[30px] font-medium leading-none text-slate-950">{overview.inProgress}</p>
+              <p className="mt-2 text-[24px] font-medium leading-none text-slate-950 sm:text-[30px]">{overview.inProgress}</p>
             </div>
-            <div className="rounded-[16px] border-[0.5px] border-slate-200 bg-white px-4 py-4">
+            <div className="rounded-[16px] border-[0.5px] border-slate-200 bg-white px-3 py-3 sm:px-4 sm:py-4">
               <p className="text-[11px] font-medium tracking-[0.5px] text-slate-500">Urgent items</p>
-              <p className="mt-2 text-[30px] font-medium leading-none text-slate-950">{overview.urgent}</p>
+              <p className="mt-2 text-[24px] font-medium leading-none text-slate-950 sm:text-[30px]">{overview.urgent}</p>
             </div>
           </div>
 
@@ -1060,8 +1075,8 @@ export default function TriageDashboard() {
         </header>
 
         <section className="rounded-[20px] border-[0.5px] border-slate-200 bg-white px-4 py-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-            <div className="relative min-w-0 flex-1">
+          <div className="grid gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center">
+            <div className="relative min-w-0 sm:col-span-2 lg:flex-1">
               <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">
                 <SearchIcon />
               </span>
@@ -1132,7 +1147,7 @@ export default function TriageDashboard() {
             <button
               type="button"
               onClick={openModal}
-              className={`${buttonBaseClasses()} shrink-0 border-slate-950 bg-slate-950 px-4 text-white hover:bg-slate-800`}
+              className={`${buttonBaseClasses()} w-full shrink-0 border-slate-950 bg-slate-950 px-4 text-white hover:bg-slate-800 lg:w-auto`}
             >
               <span aria-hidden="true" className="mr-2 flex items-center">
                 <PlusIcon />
@@ -1142,22 +1157,21 @@ export default function TriageDashboard() {
           </div>
         </section>
 
-        <section
-          className={`panel-open min-h-0 overflow-hidden rounded-[24px] border-[0.5px] border-slate-200 bg-white ${
-            selectedIncident ? "panel-open" : ""
-          }`}
-        >
+        <section className="min-h-0 overflow-hidden rounded-[24px] border-[0.5px] border-slate-200 bg-white">
           <div className="border-b-[0.5px] border-slate-200 px-4 py-3">
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-2 text-[13px] text-slate-600">
+            <div className="space-y-3 text-[13px] text-slate-600">
+              <div className="flex items-center justify-between gap-3">
                 <span className="font-medium text-slate-800">Bulk actions</span>
                 <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full border-[0.5px] border-slate-200 bg-slate-50 px-2 text-[11px] font-medium text-slate-600">
                   {selectedCount}
                 </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:flex xl:flex-wrap xl:items-center xl:gap-2">
                 <button
                   type="button"
                   onClick={toggleVisibleTicketsSelection}
-                  className={`${buttonBaseClasses()} border-slate-200 bg-white px-3 text-[11px] text-slate-700 hover:border-slate-300 hover:bg-slate-50`}
+                  className={`${buttonBaseClasses()} w-full border-slate-200 bg-white px-3 text-[11px] text-slate-700 hover:border-slate-300 hover:bg-slate-50 xl:w-auto`}
                 >
                   <span aria-hidden="true" className="mr-1 flex items-center">
                     <SelectPageIcon />
@@ -1165,13 +1179,11 @@ export default function TriageDashboard() {
                   Select page
                 </button>
 
-                <div className="h-4 w-px bg-slate-200" />
-
                 <button
                   type="button"
                   onClick={() => void handleBulkStatusChange("in_progress")}
                   disabled={bulkWorking || selectedCount === 0}
-                  className={`${buttonBaseClasses()} border-sky-200 bg-sky-50 px-3 text-[11px] text-sky-800 hover:border-sky-300 hover:bg-sky-100`}
+                  className={`${buttonBaseClasses()} w-full border-sky-200 bg-sky-50 px-3 text-[11px] text-sky-800 hover:border-sky-300 hover:bg-sky-100 xl:w-auto`}
                 >
                   <span aria-hidden="true" className="mr-1 flex items-center">
                     <StatusIcon status="in_progress" />
@@ -1182,7 +1194,7 @@ export default function TriageDashboard() {
                   type="button"
                   onClick={() => void handleBulkStatusChange("resolved")}
                   disabled={bulkWorking || selectedCount === 0}
-                  className={`${buttonBaseClasses()} border-emerald-200 bg-emerald-50 px-3 text-[11px] text-emerald-800 hover:border-emerald-300 hover:bg-emerald-100`}
+                  className={`${buttonBaseClasses()} w-full border-emerald-200 bg-emerald-50 px-3 text-[11px] text-emerald-800 hover:border-emerald-300 hover:bg-emerald-100 xl:w-auto`}
                 >
                   <span aria-hidden="true" className="mr-1 flex items-center">
                     <StatusIcon status="resolved" />
@@ -1193,7 +1205,7 @@ export default function TriageDashboard() {
                   type="button"
                   onClick={() => void handleBulkStatusChange("closed")}
                   disabled={bulkWorking || selectedCount === 0}
-                  className={`${buttonBaseClasses()} border-slate-200 bg-slate-50 px-3 text-[11px] text-slate-700 hover:border-slate-300 hover:bg-slate-100`}
+                  className={`${buttonBaseClasses()} w-full border-slate-200 bg-slate-50 px-3 text-[11px] text-slate-700 hover:border-slate-300 hover:bg-slate-100 xl:w-auto`}
                 >
                   <span aria-hidden="true" className="mr-1 flex items-center">
                     <StatusIcon status="closed" />
@@ -1201,21 +1213,19 @@ export default function TriageDashboard() {
                   Close
                 </button>
 
-                <div className="h-4 w-px bg-slate-200" />
-
-                <div className="flex items-center gap-2">
+                <div className="col-span-2 flex flex-col gap-2 sm:col-span-3 sm:flex-row xl:col-span-1">
                   <input
                     type="text"
                     value={bulkAssignee}
                     onChange={(event) => setBulkAssignee(event.target.value)}
                     placeholder="Assign to"
-                    className={`${inputBaseClasses()} w-40`}
+                    className={`${inputBaseClasses()} w-full sm:w-40`}
                   />
                   <button
                     type="button"
                     onClick={() => void handleBulkAssign()}
                     disabled={bulkWorking || selectedCount === 0 || !bulkAssignee.trim()}
-                    className={`${buttonBaseClasses()} border-slate-200 bg-white px-3 text-[11px] text-slate-700 hover:border-slate-300 hover:bg-slate-50`}
+                    className={`${buttonBaseClasses()} w-full border-slate-200 bg-white px-3 text-[11px] text-slate-700 hover:border-slate-300 hover:bg-slate-50 sm:w-auto`}
                   >
                     <span aria-hidden="true" className="mr-1 flex items-center">
                       <PersonAddIcon />
@@ -1224,13 +1234,11 @@ export default function TriageDashboard() {
                   </button>
                 </div>
 
-                <div className="h-4 w-px bg-slate-200" />
-
                 <button
                   type="button"
                   onClick={() => void handleBulkCopyReplies()}
                   disabled={selectedCount === 0}
-                  className={`${buttonBaseClasses()} border-slate-200 bg-white px-3 text-[11px] text-slate-700 hover:border-slate-300 hover:bg-slate-50`}
+                  className={`${buttonBaseClasses()} w-full border-slate-200 bg-white px-3 text-[11px] text-slate-700 hover:border-slate-300 hover:bg-slate-50 xl:w-auto`}
                 >
                   <span aria-hidden="true" className="mr-1 flex items-center">
                     <ClipboardIcon />
@@ -1241,7 +1249,7 @@ export default function TriageDashboard() {
                   type="button"
                   onClick={() => void handleBulkDelete()}
                   disabled={bulkWorking || selectedCount === 0}
-                  className={`${buttonBaseClasses()} border-rose-200 bg-rose-50 px-3 text-[11px] text-rose-800 hover:border-rose-300 hover:bg-rose-100`}
+                  className={`${buttonBaseClasses()} w-full border-rose-200 bg-rose-50 px-3 text-[11px] text-rose-800 hover:border-rose-300 hover:bg-rose-100 xl:w-auto`}
                 >
                   <span aria-hidden="true" className="mr-1 flex items-center">
                     <TrashIcon />
@@ -1258,16 +1266,14 @@ export default function TriageDashboard() {
             </div>
           ) : null}
 
-          <div className="flex min-h-0 flex-col lg:h-[calc(100vh-18rem)] lg:flex-row">
-            <div
-              className={`min-w-0 border-slate-200 ${selectedIncident ? "lg:basis-[54%] lg:border-r-[0.5px]" : "lg:basis-full"}`}
-            >
-              <div className="flex items-center justify-between gap-3 border-b-[0.5px] border-slate-200 px-4 py-3 text-[13px] font-normal text-slate-600">
+          <div className="flex min-h-0 flex-col xl:h-[calc(100vh-18rem)]">
+            <div className="min-w-0 border-slate-200 xl:basis-full">
+              <div className="flex flex-col gap-2 border-b-[0.5px] border-slate-200 px-4 py-3 text-[13px] font-normal text-slate-600 sm:flex-row sm:items-center sm:justify-between">
                 <p>
                   Showing {filteredTickets.length === 0 ? 0 : pageStart} to {pageEnd} of {filteredTickets.length} incident
                   {filteredTickets.length === 1 ? "" : "s"}
                 </p>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setPage((current) => Math.max(1, current - 1))}
@@ -1305,251 +1311,166 @@ export default function TriageDashboard() {
                   No operational incidents match the current search and filters.
                 </div>
               ) : (
-                <div className="h-full overflow-auto">
-                  <table className="min-w-full table-fixed border-collapse text-left">
-                    <colgroup>
-                      <col style={{ width: "36px" }} />
-                      <col style={{ width: "42%" }} />
-                      <col style={{ width: "18%" }} />
-                      <col style={{ width: "16%" }} />
-                      <col style={{ width: "14%" }} />
-                    </colgroup>
-                    <thead>
-                      <tr className="border-b-[0.5px] border-slate-200 bg-slate-50 text-[10px] font-medium tracking-[0.5px] text-slate-500">
-                        <th className="px-3 py-3">
-                          <input
-                            type="checkbox"
-                            checked={allVisibleSelected}
-                            onChange={toggleVisibleTicketsSelection}
-                            className="h-4 w-4 rounded border-slate-300 text-sky-600 focus-visible:ring-2 focus-visible:ring-sky-100"
-                            aria-label="Select visible incidents"
-                          />
-                        </th>
-                        <th className="px-3 py-3">Incident</th>
-                        <th className="px-3 py-3">Status</th>
-                        <th className="px-3 py-3">Category</th>
-                        <th className="px-3 py-3">Priority</th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white">
-                      {pagedTickets.map((ticket) => {
-                        const isSelected = incidentRowSelected(ticket.id);
+                <>
+                  <div className="space-y-3 px-4 py-4 xl:hidden">
+                    {pagedTickets.map((ticket) => {
+                      const isSelected = incidentRowSelected(ticket.id);
 
-                        return (
-                          <tr
-                            key={ticket.id}
-                            onClick={() => selectIncident(ticket)}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                selectIncident(ticket);
-                              }
-                            }}
-                            tabIndex={0}
-                            className={`cursor-pointer border-b-[0.5px] border-slate-200 outline-none transition last:border-b-0 ${
-                              isSelected ? "bg-sky-50" : "hover:bg-slate-50"
-                            }`}
-                            aria-selected={isSelected}
-                          >
-                            <td className="px-3 py-4 align-top">
-                              <input
-                                type="checkbox"
-                                checked={selectedTicketIds.includes(ticket.id)}
-                                onChange={() => toggleTicketSelection(ticket.id)}
-                                onClick={(event) => event.stopPropagation()}
-                                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-600 focus-visible:ring-2 focus-visible:ring-sky-100"
-                                aria-label={`Select incident ${ticket.extracted_fields.subject}`}
-                              />
-                            </td>
-                            <td className="px-3 py-4 align-top">
-                              <div className="space-y-2">
-                                <p className="text-[13px] font-medium leading-5 text-slate-950" style={clampTwoLinesStyle}>
-                                  {ticket.extracted_fields.subject}
-                                </p>
-                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                  <MetaItem icon={<CalendarIcon />}>{formatDate(ticket.created_at)}</MetaItem>
-                                  <MetaItem icon={<UserIcon />}>{ticket.extracted_fields.requester}</MetaItem>
-                                  <MetaItem icon={<UserCheckIcon />}>{ticket.assignee || "Unassigned"}</MetaItem>
+                      return (
+                        <article
+                          key={ticket.id}
+                          onClick={() => selectIncident(ticket)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              selectIncident(ticket);
+                            }
+                          }}
+                          tabIndex={0}
+                          className={`cursor-pointer rounded-[16px] border-[0.5px] p-4 outline-none transition ${
+                            isSelected
+                              ? "border-sky-200 bg-sky-50"
+                              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                          }`}
+                          aria-selected={isSelected}
+                        >
+                          <div className="flex flex-col gap-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-3">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedTicketIds.includes(ticket.id)}
+                                  onChange={() => toggleTicketSelection(ticket.id)}
+                                  onClick={(event) => event.stopPropagation()}
+                                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-600 focus-visible:ring-2 focus-visible:ring-sky-100"
+                                  aria-label={`Select incident ${ticket.extracted_fields.subject}`}
+                                />
+                                <div className="space-y-1.5">
+                                  <p className="text-[13px] font-medium leading-5 text-slate-950">{ticket.extracted_fields.subject}</p>
+                                  <p className="text-[12px] font-normal leading-5 text-slate-500">{ticket.extracted_fields.issue_summary}</p>
                                 </div>
-                                <p className="text-[12px] font-normal leading-5 text-slate-500" style={clampTwoLinesStyle}>
-                                  {ticket.extracted_fields.issue_summary}
-                                </p>
                               </div>
-                            </td>
-                            <td className="px-3 py-4 align-top">
                               <span className={`${badgeBaseClasses()} ${statusBadgeClasses(ticket.status)}`}>
                                 {ticketStatusLabel(ticket.status)}
                               </span>
-                            </td>
-                            <td className="px-3 py-4 align-top">
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
                               <span className={`${badgeBaseClasses()} ${categoryBadgeClasses()}`}>
                                 {formatLabel(ticket.category)}
                               </span>
-                            </td>
-                            <td className="px-3 py-4 align-top">
                               <span className={`${badgeBaseClasses()} ${priorityBadgeClasses(ticket.priority)}`}>
                                 {formatLabel(ticket.priority)}
                               </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                              <MetaItem icon={<CalendarIcon />}>{formatDate(ticket.created_at)}</MetaItem>
+                              <MetaItem icon={<UserIcon />}>{ticket.extracted_fields.requester}</MetaItem>
+                              <MetaItem icon={<UserCheckIcon />}>{ticket.assignee || "Unassigned"}</MetaItem>
+                            </div>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+
+                  <div className="hidden h-full overflow-auto xl:block">
+                    <table className="min-w-full table-fixed border-collapse text-left">
+                      <colgroup>
+                        <col style={{ width: "36px" }} />
+                        <col style={{ width: "42%" }} />
+                        <col style={{ width: "18%" }} />
+                        <col style={{ width: "16%" }} />
+                        <col style={{ width: "14%" }} />
+                      </colgroup>
+                      <thead>
+                        <tr className="border-b-[0.5px] border-slate-200 bg-slate-50 text-[10px] font-medium tracking-[0.5px] text-slate-500">
+                          <th className="px-3 py-3">
+                            <input
+                              type="checkbox"
+                              checked={allVisibleSelected}
+                              onChange={toggleVisibleTicketsSelection}
+                              className="h-4 w-4 rounded border-slate-300 text-sky-600 focus-visible:ring-2 focus-visible:ring-sky-100"
+                              aria-label="Select visible incidents"
+                            />
+                          </th>
+                          <th className="px-3 py-3">Incident</th>
+                          <th className="px-3 py-3">Status</th>
+                          <th className="px-3 py-3">Category</th>
+                          <th className="px-3 py-3">Priority</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white">
+                        {pagedTickets.map((ticket) => {
+                          const isSelected = incidentRowSelected(ticket.id);
+
+                          return (
+                            <tr
+                              key={ticket.id}
+                              onClick={() => selectIncident(ticket)}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  selectIncident(ticket);
+                                }
+                              }}
+                              tabIndex={0}
+                              className={`cursor-pointer border-b-[0.5px] border-slate-200 outline-none transition last:border-b-0 ${
+                                isSelected ? "bg-sky-50" : "hover:bg-slate-50"
+                              }`}
+                              aria-selected={isSelected}
+                            >
+                              <td className="px-3 py-4 align-top">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedTicketIds.includes(ticket.id)}
+                                  onChange={() => toggleTicketSelection(ticket.id)}
+                                  onClick={(event) => event.stopPropagation()}
+                                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-600 focus-visible:ring-2 focus-visible:ring-sky-100"
+                                  aria-label={`Select incident ${ticket.extracted_fields.subject}`}
+                                />
+                              </td>
+                              <td className="px-3 py-4 align-top">
+                                <div className="space-y-2">
+                                  <p className="text-[13px] font-medium leading-5 text-slate-950" style={clampTwoLinesStyle}>
+                                    {ticket.extracted_fields.subject}
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                    <MetaItem icon={<CalendarIcon />}>{formatDate(ticket.created_at)}</MetaItem>
+                                    <MetaItem icon={<UserIcon />}>{ticket.extracted_fields.requester}</MetaItem>
+                                    <MetaItem icon={<UserCheckIcon />}>{ticket.assignee || "Unassigned"}</MetaItem>
+                                  </div>
+                                  <p className="text-[12px] font-normal leading-5 text-slate-500" style={clampTwoLinesStyle}>
+                                    {ticket.extracted_fields.issue_summary}
+                                  </p>
+                                </div>
+                              </td>
+                              <td className="px-3 py-4 align-top">
+                                <span className={`${badgeBaseClasses()} ${statusBadgeClasses(ticket.status)}`}>
+                                  {ticketStatusLabel(ticket.status)}
+                                </span>
+                              </td>
+                              <td className="px-3 py-4 align-top">
+                                <span className={`${badgeBaseClasses()} ${categoryBadgeClasses()}`}>
+                                  {formatLabel(ticket.category)}
+                                </span>
+                              </td>
+                              <td className="px-3 py-4 align-top">
+                                <span className={`${badgeBaseClasses()} ${priorityBadgeClasses(ticket.priority)}`}>
+                                  {formatLabel(ticket.priority)}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
 
-            {selectedIncident ? (
-              <aside className="flex min-w-0 flex-col border-t-[0.5px] border-slate-200 bg-white lg:flex-[0_0_46%] lg:border-l-[0.5px] lg:border-t-0">
-                <div className="flex items-start justify-between gap-4 px-4 pt-4">
-                  <div className="min-w-0 space-y-3">
-                    <div className="space-y-2">
-                      <p className="text-[14px] font-medium leading-5 text-slate-950">{selectedIncident.extracted_fields.subject}</p>
-                      <div className="flex flex-wrap gap-2">
-                        <span className={`${badgeBaseClasses()} ${statusBadgeClasses(selectedIncident.status)}`}>
-                          {ticketStatusLabel(selectedIncident.status)}
-                        </span>
-                        <span className={`${badgeBaseClasses()} ${priorityBadgeClasses(selectedIncident.priority)}`}>
-                          {formatLabel(selectedIncident.priority)}
-                        </span>
-                        <span className={`${badgeBaseClasses()} ${categoryBadgeClasses()}`}>
-                          {formatLabel(selectedIncident.category)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <MetaItem icon={<CalendarIcon />}>{formatDate(selectedIncident.created_at)}</MetaItem>
-                      <MetaItem icon={<UserIcon />}>{selectedIncident.extracted_fields.requester}</MetaItem>
-                      <MetaItem icon={<UserCheckIcon />}>{selectedIncident.assignee || "Unassigned"}</MetaItem>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedIncidentId(null)}
-                    className={`${buttonBaseClasses()} h-8 w-8 shrink-0 border-slate-200 bg-white px-0 text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900`}
-                    aria-label="Close incident details"
-                  >
-                    <CloseIcon />
-                  </button>
-                </div>
-
-                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-                  <div className="space-y-4">
-                    <section className="space-y-2">
-                      <p className="text-[10px] font-medium uppercase tracking-[0.5px] text-slate-500">Description</p>
-                      <div className="rounded-[14px] border-[0.5px] border-slate-200 bg-slate-50 px-4 py-3 text-[12px] font-normal leading-[1.6] text-slate-600">
-                        {selectedIncident.raw_text}
-                      </div>
-                    </section>
-
-                    <section className="space-y-2">
-                      <p className="text-[10px] font-medium text-slate-500">Suggested reply</p>
-                      <div className="relative border-l-[0.5px] border-slate-300 bg-white pl-4 pr-9 text-[13px] font-normal leading-[1.6] text-slate-600">
-                        <button
-                          type="button"
-                          onClick={() => void handleCopyReply(selectedIncident.suggested_reply)}
-                          className="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border-[0.5px] border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
-                          aria-label="Copy suggested reply"
-                        >
-                          {replyCopied ? <CheckIcon /> : <CopyIcon />}
-                        </button>
-                        {selectedIncident.suggested_reply}
-                      </div>
-                    </section>
-
-                    <div className="border-t-[0.5px] border-slate-200" />
-
-                    <section className="space-y-3">
-                      <p className="text-[10px] font-medium uppercase tracking-[0.5px] text-slate-500">Update status</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {STATUS_ORDER.map((status) => {
-                          const active = selectedIncident.status === status;
-
-                          return (
-                            <button
-                              key={status}
-                              type="button"
-                              onClick={() => void handlePanelStatusChange(status)}
-                              className={`${buttonBaseClasses()} h-10 justify-start gap-2 border-[0.5px] px-3 text-[12px] text-slate-700 ${statusToneClasses(status, active)}`}
-                            >
-                              <DotIcon
-                                className={
-                                  status === "open"
-                                    ? active
-                                      ? "bg-amber-600"
-                                      : "bg-amber-500"
-                                    : status === "in_progress"
-                                      ? active
-                                        ? "bg-sky-600"
-                                        : "bg-sky-500"
-                                      : status === "resolved"
-                                        ? active
-                                          ? "bg-emerald-600"
-                                          : "bg-emerald-500"
-                                        : active
-                                          ? "bg-slate-600"
-                                          : "bg-slate-400"
-                                }
-                              />
-                              <span>{ticketStatusLabel(status)}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </section>
-
-                    <section className="space-y-2">
-                      <p className="text-[10px] font-medium uppercase tracking-[0.5px] text-slate-500">Assign to</p>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={panelAssigneeDraft}
-                          onChange={(event) => setPanelAssigneeDraft(event.target.value)}
-                          placeholder="Enter assignee"
-                          className={`${inputBaseClasses()} min-w-0 flex-1`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => void handlePanelAssign()}
-                          disabled={panelAssigneeDraft.trim() === selectedIncident.assignee.trim()}
-                          className={`${buttonBaseClasses()} border-slate-200 bg-white px-3 text-[12px] text-slate-700 hover:border-slate-300 hover:bg-slate-50`}
-                        >
-                          <span aria-hidden="true" className="mr-1 flex items-center">
-                            <PersonAddIcon />
-                          </span>
-                          Assign
-                        </button>
-                      </div>
-                    </section>
-                  </div>
-                </div>
-
-                <footer className="flex items-center justify-between gap-3 border-t-[0.5px] border-slate-200 px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => void handleDeleteTicket(selectedIncident.id)}
-                    disabled={deletingTicketId === selectedIncident.id}
-                    className={`${buttonBaseClasses()} border-rose-200 bg-transparent px-3 text-[12px] text-rose-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800`}
-                  >
-                    <span aria-hidden="true" className="mr-1 flex items-center">
-                      <TrashIcon />
-                    </span>
-                    {deletingTicketId === selectedIncident.id ? "Deleting..." : "Delete"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handlePanelSave()}
-                    className={`${buttonBaseClasses()} border-slate-950 bg-slate-950 px-4 text-[12px] text-white hover:bg-slate-800`}
-                  >
-                    <span aria-hidden="true" className="mr-1 flex items-center">
-                      <SaveIcon />
-                    </span>
-                    Save changes
-                  </button>
-                </footer>
-              </aside>
-            ) : null}
           </div>
 
           {statusMessage ? (
@@ -1559,6 +1480,165 @@ export default function TriageDashboard() {
           ) : null}
         </section>
       </div>
+
+      {selectedIncident ? (
+        <div
+          className="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-950/35 px-0 py-0 backdrop-blur-[2px] sm:items-center sm:px-4 sm:py-6"
+          onClick={() => setSelectedIncidentId(null)}
+        >
+          <aside
+            className="flex h-full w-full max-w-none flex-col rounded-none border-0 bg-white shadow-none sm:max-h-[calc(100vh-3rem)] sm:max-w-4xl sm:rounded-[24px] sm:border-[0.5px] sm:border-slate-200 sm:shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b-[0.5px] border-slate-200 px-4 pt-4 sm:px-5 sm:pt-5">
+              <div className="min-w-0 space-y-3">
+                <div className="space-y-2">
+                  <p className="text-[14px] font-medium leading-5 text-slate-950">{selectedIncident.extracted_fields.subject}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <span className={`${badgeBaseClasses()} ${statusBadgeClasses(selectedIncident.status)}`}>
+                      {ticketStatusLabel(selectedIncident.status)}
+                    </span>
+                    <span className={`${badgeBaseClasses()} ${priorityBadgeClasses(selectedIncident.priority)}`}>
+                      {formatLabel(selectedIncident.priority)}
+                    </span>
+                    <span className={`${badgeBaseClasses()} ${categoryBadgeClasses()}`}>
+                      {formatLabel(selectedIncident.category)}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <MetaItem icon={<CalendarIcon />}>{formatDate(selectedIncident.created_at)}</MetaItem>
+                  <MetaItem icon={<UserIcon />}>{selectedIncident.extracted_fields.requester}</MetaItem>
+                  <MetaItem icon={<UserCheckIcon />}>{selectedIncident.assignee || "Unassigned"}</MetaItem>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedIncidentId(null)}
+                className={`${buttonBaseClasses()} h-8 w-8 shrink-0 border-slate-200 bg-white px-0 text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900`}
+                aria-label="Close incident details"
+              >
+                <CloseIcon />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+              <div className="space-y-4">
+                <section className="space-y-2">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.5px] text-slate-500">Description</p>
+                  <div className="rounded-[14px] border-[0.5px] border-slate-200 bg-slate-50 px-4 py-3 text-[12px] font-normal leading-[1.6] text-slate-600">
+                    {selectedIncident.raw_text}
+                  </div>
+                </section>
+
+                <section className="space-y-2">
+                  <p className="text-[10px] font-medium text-slate-500">Suggested reply</p>
+                  <div className="relative border-l-[0.5px] border-slate-300 bg-white pl-4 pr-9 text-[13px] font-normal leading-[1.6] text-slate-600">
+                    <button
+                      type="button"
+                      onClick={() => void handleCopyReply(selectedIncident.suggested_reply)}
+                      className="absolute right-2 top-2 inline-flex h-6 w-6 items-center justify-center rounded-full border-[0.5px] border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                      aria-label="Copy suggested reply"
+                    >
+                      {replyCopied ? <CheckIcon /> : <CopyIcon />}
+                    </button>
+                    {selectedIncident.suggested_reply}
+                  </div>
+                </section>
+
+                <div className="border-t-[0.5px] border-slate-200" />
+
+                <section className="space-y-3">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.5px] text-slate-500">Update status</p>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {STATUS_ORDER.map((status) => {
+                      const active = selectedIncident.status === status;
+
+                      return (
+                        <button
+                          key={status}
+                          type="button"
+                          onClick={() => void handlePanelStatusChange(status)}
+                          className={`${buttonBaseClasses()} h-10 justify-start gap-2 border-[0.5px] px-3 text-[12px] text-slate-700 ${statusToneClasses(status, active)}`}
+                        >
+                          <DotIcon
+                            className={
+                              status === "open"
+                                ? active
+                                  ? "bg-amber-600"
+                                  : "bg-amber-500"
+                                : status === "in_progress"
+                                  ? active
+                                    ? "bg-sky-600"
+                                    : "bg-sky-500"
+                                  : status === "resolved"
+                                    ? active
+                                      ? "bg-emerald-600"
+                                      : "bg-emerald-500"
+                                    : active
+                                      ? "bg-slate-600"
+                                      : "bg-slate-400"
+                            }
+                          />
+                          <span>{ticketStatusLabel(status)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                <section className="space-y-2">
+                  <p className="text-[10px] font-medium uppercase tracking-[0.5px] text-slate-500">Assign to</p>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      type="text"
+                      value={panelAssigneeDraft}
+                      onChange={(event) => setPanelAssigneeDraft(event.target.value)}
+                      placeholder="Enter assignee"
+                      className={`${inputBaseClasses()} min-w-0 flex-1`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handlePanelAssign()}
+                      disabled={panelAssigneeDraft.trim() === selectedIncident.assignee.trim()}
+                      className={`${buttonBaseClasses()} border-slate-200 bg-white px-3 text-[12px] text-slate-700 hover:border-slate-300 hover:bg-slate-50`}
+                    >
+                      <span aria-hidden="true" className="mr-1 flex items-center">
+                        <PersonAddIcon />
+                      </span>
+                      Assign
+                    </button>
+                  </div>
+                </section>
+              </div>
+            </div>
+
+            <footer className="flex flex-col-reverse gap-2 border-t-[0.5px] border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <button
+                type="button"
+                onClick={() => void handleDeleteTicket(selectedIncident.id)}
+                disabled={deletingTicketId === selectedIncident.id}
+                className={`${buttonBaseClasses()} border-rose-200 bg-transparent px-3 text-[12px] text-rose-700 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-800`}
+              >
+                <span aria-hidden="true" className="mr-1 flex items-center">
+                  <TrashIcon />
+                </span>
+                {deletingTicketId === selectedIncident.id ? "Deleting..." : "Delete"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handlePanelSave()}
+                className={`${buttonBaseClasses()} border-slate-950 bg-slate-950 px-4 text-[12px] text-white hover:bg-slate-800`}
+              >
+                <span aria-hidden="true" className="mr-1 flex items-center">
+                  <SaveIcon />
+                </span>
+                Save changes
+              </button>
+            </footer>
+          </aside>
+        </div>
+      ) : null}
 
       {modalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6 sm:px-6" onClick={closeModal}>

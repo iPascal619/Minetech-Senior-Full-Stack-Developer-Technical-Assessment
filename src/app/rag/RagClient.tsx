@@ -651,7 +651,7 @@ export default function RagPage() {
   }
 
   return (
-    <main className="min-h-screen bg-background px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-background px-3 py-4 text-slate-900 sm:px-4 sm:py-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
         <header className="flex flex-col gap-4 rounded-[16px] border-[0.5px] border-slate-200 bg-white px-4 py-4 sm:px-5 sm:py-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-2xl space-y-1.5">
@@ -680,7 +680,7 @@ export default function RagPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 lg:justify-end">
+          <div className="grid gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap lg:justify-end">
             <HeroChip icon={<DatabaseIcon />}>Knowledge base entries · {documentCountLabel}</HeroChip>
             <HeroChip icon={<CalendarIcon />}>Latest ingestion · {latestIngestionLabel}</HeroChip>
             <HeroChip icon={<CitationIcon />}>Citations in every reply</HeroChip>
@@ -874,7 +874,7 @@ export default function RagPage() {
 
           <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-[16px] border-[0.5px] border-slate-200 bg-white">
             <div className="px-4 py-4 sm:px-5 sm:py-5">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1.5">
                   <h2 className="text-[14px] font-medium leading-5 text-slate-950">Site intelligence chat</h2>
                   <p className="text-[12px] font-normal leading-5 text-slate-600">
@@ -882,19 +882,19 @@ export default function RagPage() {
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
                   <button
                     type="button"
                     onClick={handleStoreChat}
                     disabled={messages.length === 0 || asking}
-                    className="inline-flex h-8 items-center justify-center rounded-[8px] border-[0.5px] border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-8 items-center justify-center rounded-[8px] border-[0.5px] border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                   >
                     Store chat
                   </button>
                   <button
                     type="button"
                     onClick={handleNewChat}
-                    className="inline-flex h-8 items-center justify-center rounded-[8px] border-[0.5px] border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                    className="inline-flex h-8 items-center justify-center rounded-[8px] border-[0.5px] border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:w-auto"
                   >
                     New chat
                   </button>
@@ -908,7 +908,7 @@ export default function RagPage() {
             <div className="flex min-h-0 flex-1 flex-col border-t-[0.5px] border-slate-200">
               <div
                 ref={chatViewportRef}
-                className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5"
+                className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-5"
               >
                 {chatError ? (
                   <div className="mb-4 rounded-[12px] border-[0.5px] border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-normal text-rose-700">
@@ -917,7 +917,7 @@ export default function RagPage() {
                 ) : null}
 
                 {messages.length === 0 ? (
-                  <div className="grid h-full min-h-[240px] place-items-center px-6 text-center">
+                  <div className="grid h-full min-h-[240px] place-items-center px-4 text-center sm:px-6">
                     <p className="max-w-[320px] text-[13px] font-normal leading-[1.6] text-slate-500">
                       Ready when you are. Try asking: "What are the safety protocols for shaft B2?" or "Summarise the latest inspection report."
                     </p>
@@ -935,7 +935,7 @@ export default function RagPage() {
                           key={message.id}
                           className={`flex ${isAssistant ? "justify-start" : "justify-end"}`}
                         >
-                          <div className={`max-w-[75%] rounded-[12px] px-3.5 py-2.5 text-[13px] font-normal leading-6 ${bubbleClasses}`}>
+                          <div className={`max-w-[92%] rounded-[12px] px-3.5 py-2.5 text-[13px] font-normal leading-6 sm:max-w-[85%] lg:max-w-[75%] ${bubbleClasses}`}>
                             <div className="space-y-1.5">
                               <div className="flex items-center justify-between gap-3 text-[11px] font-normal text-slate-500">
                                 <span>{isAssistant ? "Assistant" : "You"}</span>
@@ -983,18 +983,18 @@ export default function RagPage() {
               </div>
 
               <form className="border-t-[0.5px] border-slate-200 p-3 sm:p-3" onSubmit={handleQuestionSubmit}>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <input
                     value={question}
                     maxLength={2000}
                     onChange={(event) => setQuestion(event.target.value)}
                     placeholder="Ask a question about your site documents…"
-                    className="h-9 flex-1 rounded-[8px] border-[0.5px] border-slate-200 bg-white px-3 text-[13px] font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus-visible:border-sky-300 focus-visible:ring-2 focus-visible:ring-sky-100"
+                    className="h-9 w-full flex-1 rounded-[8px] border-[0.5px] border-slate-200 bg-white px-3 text-[13px] font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus-visible:border-sky-300 focus-visible:ring-2 focus-visible:ring-sky-100"
                   />
                   <button
                     type="submit"
                     disabled={asking}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border-[0.5px] border-slate-900 bg-slate-900 text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-9 w-full shrink-0 items-center justify-center rounded-[8px] border-[0.5px] border-slate-900 bg-slate-900 text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-9"
                     aria-label="Send question"
                     title="Send question"
                   >

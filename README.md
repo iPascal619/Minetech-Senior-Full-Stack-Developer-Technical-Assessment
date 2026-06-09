@@ -1,11 +1,13 @@
 # MineTech
 
-MineTech is a mining operations intelligence platform built for the Senior Full-Stack Developer technical assessment. It combines two local AI workflows with PostgreSQL persistence and a Next.js App Router frontend:
+MineTech is a mining operations intelligence platform built for the Senior Full-Stack Developer technical assessment. The current implementation includes two local AI workflows, PostgreSQL persistence, a Next.js App Router frontend, structured API logging, and a small benchmark harness for repeatable validation.
+
+It currently provides:
 
 1. Operational incident triage for mining site reports.
 2. A retrieval-augmented knowledge base for safety and operations documents.
-
-The app is designed to run on a local stack with no external model APIs.
+3. Local-first chat storage, source citations, and incident management UI.
+4. Benchmark scripts for triage and RAG scenarios.
 
 ## Highlights
 
@@ -16,6 +18,8 @@ The app is designed to run on a local stack with no external model APIs.
 - See citations inline and open the cited source document from the chat UI.
 - Save chat transcripts locally in the browser and start a fresh chat.
 - Rate limit the API routes to avoid accidental bursts.
+- Emit structured request logs for triage and RAG requests.
+- Validate the main AI flows with a repeatable local benchmark harness.
 
 ## Tech Stack
 
@@ -26,6 +30,13 @@ The app is designed to run on a local stack with no external model APIs.
 - PostgreSQL
 - pgvector
 - Ollama
+
+Current runtime defaults:
+
+- `qwen2.5:3b` for triage and answer generation
+- `nomic-embed-text` for document embeddings
+- `keep_alive=30m` for Ollama requests
+- SSE status events are hidden from the RAG UI
 
 ## Repository Layout
 
@@ -167,13 +178,11 @@ Then review `.env.local`:
 DATABASE_URL=postgresql://postgres:pascal123@localhost:5432/minetech
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:3b
-```
-
-Optional:
-
-```env
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
+OLLAMA_KEEP_ALIVE=30m
 ```
+
+The app reads these values from `src/lib/db.ts` and `src/lib/ollama.ts`.
 
 ### 6. Start the app
 
@@ -238,6 +247,16 @@ The project uses two database migrations:
 
 The document index uses an IVFFlat index for cosine similarity search.
 
+## Current State
+
+The repo is currently in a working state with these behaviors implemented:
+
+- The triage route normalizes model output, falls back on incomplete JSON, and stores incidents in PostgreSQL.
+- The RAG route retrieves citations with vector-first search, falls back to keyword search, and hides internal status events from the UI.
+- The chat page supports scrollable transcripts, local chat storage, source inspection, and a new-chat flow.
+- The API routes emit structured JSON logs for request-level observability.
+- `npm test` and `npm run build` pass, and `npm run benchmark:ai` is available for a live end-to-end check.
+
 ## Troubleshooting
 
 ### `npm` not found on Windows PowerShell
@@ -272,13 +291,22 @@ npm.cmd run build
 
 ## Notes
 
-- The app is designed to work best when PostgreSQL and Ollama are both local and available.
+- The app is designed to work best when PostgreSQL and Ollama are both available.
 - Chat transcripts can be stored locally in the browser from the RAG page.
 - This repository keeps the AI workflows on-device as much as possible.
+- The decision memo is intentionally kept out of the GitHub push.
 
 ## Deployment
 
-The application can be deployed as a standard Next.js app, but full functionality depends on a reachable PostgreSQL instance and Ollama endpoint. If you deploy the frontend separately from the local services, update the environment variables accordingly.
+The UI can be deployed to Vercel as a standard Next.js app, but the AI features require external services:
+
+- A reachable PostgreSQL database for `DATABASE_URL`
+- A reachable Ollama endpoint for `OLLAMA_BASE_URL`
+- The same models available on that Ollama host: `qwen2.5:3b` and `nomic-embed-text`
+
+If only the frontend is deployed, the shell will load but the triage and RAG APIs will fail until the environment variables are set and the services are reachable.
+
+For production, run the SQL migrations against the hosted database before sending traffic.
 
 ## License
 
