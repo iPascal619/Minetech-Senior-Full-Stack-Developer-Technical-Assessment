@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { query } from "@/lib/db";
+import { cleanText, normalizeCategory, normalizePriority } from "@/lib/normalization";
 import { generateResponse } from "@/lib/ollama";
 import { ensureTicketSchema } from "@/lib/ticket-schema";
 import { serializeTicket, type TicketFields, type TicketRow } from "@/lib/ticket-types";
@@ -20,83 +21,10 @@ type TriageResult = {
   suggested_reply: string;
 };
 
-const CATEGORY_SET = new Set([
-  "billing",
-  "technical_issue",
-  "account_access",
-  "bug_report",
-  "feature_request",
-  "security",
-  "general",
-  "other",
-]);
-
-const PRIORITY_SET = new Set(["low", "medium", "high", "urgent"]);
-
-function cleanText(value: unknown, fallback = "") {
-  if (typeof value === "string") {
-    const compact = value.replace(/\s+/g, " ").trim();
-
-    return compact || fallback;
-  }
-
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-
-  if (value == null) {
-    return fallback;
-  }
-
-  try {
-    const serialized = JSON.stringify(value);
-
-    return serialized ? serialized.replace(/\s+/g, " ").trim() : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function truncate(value: string, maxLength: number) {
   const compact = value.replace(/\s+/g, " ").trim();
 
   return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength - 3).trimEnd()}...`;
-}
-
-function normalizeSlug(value: unknown, fallback: string) {
-  const compact = cleanText(value, fallback).toLowerCase();
-  const slug = compact.replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-
-  return slug || fallback;
-}
-
-function normalizeCategory(value: unknown) {
-  const compact = cleanText(value, "general").toLowerCase();
-
-  if (/billing|invoice|payment|charge|refund/.test(compact)) return "billing";
-  if (/account|profile|settings/.test(compact)) return "account_access";
-  if (/access|login|sign in|signin|password|auth/.test(compact)) return "account_access";
-  if (/bug|error|crash|defect|broken|failure/.test(compact)) return "bug_report";
-  if (/feature|enhancement|request/.test(compact)) return "feature_request";
-  if (/security|vulnerab|breach/.test(compact)) return "security";
-  if (/technical|performance|outage|service|incident/.test(compact)) return "technical_issue";
-
-  const slug = normalizeSlug(compact, "general");
-
-  return CATEGORY_SET.has(slug) ? slug : "general";
-}
-
-function normalizePriority(value: unknown) {
-  const compact = cleanText(value, "medium").toLowerCase();
-
-  if (/urgent|critical|blocker|sev[_\s-]?1|p1/.test(compact)) return "urgent";
-  if (/high|major|sev[_\s-]?2|p2/.test(compact)) return "high";
-  if (/low|minor|sev[_\s-]?4|p4/.test(compact)) return "low";
-  if (/medium|normal|moderate|sev[_\s-]?3|p3/.test(compact)) return "medium";
-
-  const slug = normalizeSlug(compact, "medium");
-
-  return PRIORITY_SET.has(slug) ? slug : "medium";
 }
 
 function fallbackFields(rawText: string): TicketFields {
@@ -178,22 +106,40 @@ async function classifyTicket(rawText: string) {
     rawText,
   ].join("\n\n");
 
-  try {
-    const response = await generateResponse(prompt, {
+  const requestTriage = async (inputPrompt: string) => {
+    const response = await generateResponse(inputPrompt, {
       systemPrompt:
         "You are an operational incident triage engine. You must output JSON only and never include extra prose.",
       format: "json",
-      temperature: 0.1,
-      timeoutMs: 60_000,
+      temperature: 0.05,
+      timeoutMs: 45_000,
     });
 
-    const parsed = parseLooseJson(response.text);
+    return {
+      response,
+      parsed: parseLooseJson(response.text),
+    };
+  };
+
+  try {
+    const firstAttempt = await requestTriage(prompt);
+
+    if (firstAttempt.parsed) {
+      return {
+        triage: normalizeTriage(rawText, firstAttempt.parsed),
+        warning: null,
+      };
+    }
+
+    const correctionPrompt =
+      `You returned invalid JSON. Here is what you returned: ${firstAttempt.response.text}. ` +
+      'Please return only valid JSON matching this exact schema: {"category":"...","priority":"...","extracted_fields":{"subject":"...","requester":"...","issue_summary":"..."},"suggested_reply":"..."}. Return JSON only, no explanation.';
+
+    const retryAttempt = await requestTriage(correctionPrompt);
 
     return {
-      triage: normalizeTriage(rawText, parsed),
-      warning: parsed
-        ? null
-        : "The LLM returned malformed JSON, so fallback values were used for some incident fields.",
+      triage: retryAttempt.parsed ? normalizeTriage(rawText, retryAttempt.parsed) : normalizeTriage(rawText, null),
+      warning: retryAttempt.parsed ? "LLM output corrected on retry" : "Fallback values used",
     };
   } catch (error) {
     return {

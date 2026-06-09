@@ -1,6 +1,4 @@
-export const TICKET_STATUSES = ["open", "in_progress", "resolved", "closed"] as const;
-
-export type TicketStatus = (typeof TICKET_STATUSES)[number];
+import { cleanText, normalizeTicketStatus, type TicketStatus, TICKET_STATUSES } from "@/lib/normalization";
 
 export type TicketFields = {
   subject: string;
@@ -34,22 +32,8 @@ export type TicketRow = {
   updated_at: string | Date | null;
 };
 
-export function normalizeTicketStatus(value: unknown, fallback: TicketStatus = "open"): TicketStatus {
-  if (typeof value !== "string") {
-    return fallback;
-  }
-
-  const compact = value.toLowerCase().replace(/\s+/g, "_").trim();
-
-  if (compact === "open") return "open";
-  if (compact === "in_progress" || compact === "in-progress" || compact === "in progress") {
-    return "in_progress";
-  }
-  if (compact === "resolved") return "resolved";
-  if (compact === "closed") return "closed";
-
-  return fallback;
-}
+export { TICKET_STATUSES, normalizeTicketStatus };
+export type { TicketStatus };
 
 export function ticketStatusLabel(status: TicketStatus) {
   switch (status) {
@@ -78,30 +62,6 @@ export function ticketStatusClasses(status: TicketStatus) {
       return "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
     default:
       return "bg-sky-50 text-sky-700 ring-1 ring-sky-200";
-  }
-}
-
-function cleanText(value: unknown, fallback = "") {
-  if (typeof value === "string") {
-    const compact = value.replace(/\s+/g, " ").trim();
-
-    return compact || fallback;
-  }
-
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-
-  if (value == null) {
-    return fallback;
-  }
-
-  try {
-    const serialized = JSON.stringify(value);
-
-    return serialized ? serialized.replace(/\s+/g, " ").trim() : fallback;
-  } catch {
-    return fallback;
   }
 }
 

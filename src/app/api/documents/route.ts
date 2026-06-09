@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import { query } from "@/lib/db";
+import { query, toPgVectorLiteral } from "@/lib/db";
+import { generateEmbedding } from "@/lib/ollama";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -176,7 +177,38 @@ export async function POST(request: Request) {
       [randomUUID(), payload.filename || "document.txt", payload.content],
     );
 
-    return Response.json({ success: true, document: serializeDocument(saved.rows[0]) }, { status: 201 });
+    const savedDocument = saved.rows[0];
+    let embeddingStored = false;
+
+    try {
+      const { embedding } = await generateEmbedding(savedDocument.content, {
+        model: "nomic-embed-text",
+      });
+
+      if (embedding.length !== 768) {
+        throw new Error(`Expected 768 embedding dimensions, received ${embedding.length}.`);
+      }
+
+      await query(
+        `UPDATE documents
+         SET embedding = $1::vector
+         WHERE id = $2`,
+        [toPgVectorLiteral(embedding), savedDocument.id],
+      );
+
+      embeddingStored = true;
+    } catch (error) {
+      console.error("Failed to store document embedding:", error);
+    }
+
+    return Response.json(
+      {
+        success: true,
+        document: serializeDocument(savedDocument),
+        embeddingStored,
+      },
+      { status: 201 },
+    );
   } catch (error) {
     return Response.json(
       {

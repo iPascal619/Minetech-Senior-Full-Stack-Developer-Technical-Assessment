@@ -144,6 +144,38 @@ export async function query<Row extends QueryResultRow = QueryResultRow>(
   return getPool().query<Row>(text, values as unknown[]);
 }
 
+export function toPgVectorLiteral(values: readonly number[]) {
+  if (values.length === 0) {
+    throw new Error("Vector values cannot be empty.");
+  }
+
+  return `[${values
+    .map((value) => {
+      if (!Number.isFinite(value)) {
+        throw new Error("Vector values must be finite numbers.");
+      }
+
+      return Number(value);
+    })
+    .join(",")}]`;
+}
+
+export async function queryDocumentsBySimilarity<Row extends QueryResultRow = QueryResultRow>(
+  queryEmbedding: readonly number[],
+  threshold = 0.75,
+  limit = 5,
+) {
+  return query<Row & { similarity: number }>(
+    `SELECT id, filename, content, created_at, 1 - (embedding <=> $1::vector) AS similarity
+     FROM documents
+     WHERE embedding IS NOT NULL
+       AND 1 - (embedding <=> $1::vector) >= $2
+     ORDER BY embedding <=> $1::vector
+     LIMIT $3`,
+    [toPgVectorLiteral(queryEmbedding), threshold, limit],
+  );
+}
+
 export async function withClient<T>(fn: (client: PoolClient) => Promise<T>) {
   const client = await getPool().connect();
 

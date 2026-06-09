@@ -5,6 +5,11 @@ type GenerateResponseOptions = {
   timeoutMs?: number;
 };
 
+type GenerateEmbeddingOptions = {
+  model?: string;
+  timeoutMs?: number;
+};
+
 type OllamaGenerateResult = {
   response?: string;
   model?: string;
@@ -17,11 +22,88 @@ type OllamaGenerateResult = {
   eval_duration?: number;
 };
 
+type OllamaEmbeddingResult = {
+  embedding?: number[];
+  model?: string;
+};
+
 function getOllamaConfig() {
   return {
     baseUrl: (process.env.OLLAMA_BASE_URL ?? "http://localhost:11434").replace(/\/$/, ""),
     model: process.env.OLLAMA_MODEL ?? "phi3:mini",
+    embeddingModel: process.env.OLLAMA_EMBEDDING_MODEL ?? "nomic-embed-text",
   };
+}
+
+function normalizeEmbedding(values: unknown) {
+  if (!Array.isArray(values)) {
+    throw new Error("Ollama embedding response did not include an embedding array.");
+  }
+
+  const embedding = values.map((value) => {
+    if (typeof value !== "number" || !Number.isFinite(value)) {
+      throw new Error("Ollama embedding response contained invalid values.");
+    }
+
+    return value;
+  });
+
+  if (embedding.length === 0) {
+    throw new Error("Ollama embedding response was empty.");
+  }
+
+  return embedding;
+}
+
+export async function generateEmbedding(
+  input: string,
+  options: GenerateEmbeddingOptions = {},
+) {
+  const { baseUrl, embeddingModel } = getOllamaConfig();
+  const model = options.model ?? embeddingModel;
+  const requestUrl = new URL("/api/embeddings", baseUrl).toString();
+  const controller = new AbortController();
+  const timeoutId =
+    options.timeoutMs && options.timeoutMs > 0
+      ? setTimeout(() => controller.abort(), options.timeoutMs)
+      : undefined;
+
+  try {
+    const response = await fetch(requestUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        prompt: input,
+      }),
+      signal: controller.signal,
+    });
+
+    const responseText = await response.text();
+
+    if (!response.ok) {
+      throw new Error(`Ollama embedding request failed with status ${response.status}: ${responseText}`);
+    }
+
+    const payload = JSON.parse(responseText) as OllamaEmbeddingResult;
+
+    return {
+      embedding: normalizeEmbedding(payload.embedding),
+      raw: payload,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("Ollama embedding request timed out.");
+    }
+
+    throw error;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
 }
 
 export async function generateResponse(

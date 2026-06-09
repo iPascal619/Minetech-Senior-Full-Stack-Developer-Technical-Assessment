@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import { query } from "@/lib/db";
-import { generateResponse } from "@/lib/ollama";
+import { query, queryDocumentsBySimilarity } from "@/lib/db";
+import { generateEmbedding, generateResponse } from "@/lib/ollama";
 
 export const runtime = "nodejs";
 
@@ -16,6 +16,10 @@ type DocumentRow = {
   created_at: string | Date;
 };
 
+type SimilarDocumentRow = DocumentRow & {
+  similarity: number;
+};
+
 type Citation = {
   document_id: string;
   filename: string;
@@ -23,32 +27,12 @@ type Citation = {
   score: number;
 };
 
-const STOP_WORDS = new Set([
-  "the",
-  "and",
-  "for",
-  "with",
-  "that",
-  "this",
-  "from",
-  "your",
-  "what",
-  "when",
-  "where",
-  "why",
-  "how",
-  "can",
-  "could",
-  "should",
-  "would",
-  "will",
-  "about",
-  "into",
-  "need",
-  "help",
-  "question",
-  "answer",
-]);
+type RetrievalMethod = "vector" | "keyword";
+
+type RetrievedCitations = {
+  citations: Citation[];
+  retrievalMethod: RetrievalMethod;
+};
 
 function cleanText(value: unknown, fallback = "") {
   if (typeof value === "string") {
@@ -78,16 +62,6 @@ function truncate(value: string, maxLength: number) {
   const compact = value.replace(/\s+/g, " ").trim();
 
   return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength - 3).trimEnd()}...`;
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function keywordsFromQuestion(question: string) {
-  const tokens = question.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [];
-
-  return Array.from(new Set(tokens.filter((token) => !STOP_WORDS.has(token)))).slice(0, 10);
 }
 
 function chunkText(content: string) {
@@ -139,76 +113,112 @@ function chunkText(content: string) {
   return chunks.filter(Boolean);
 }
 
-function scoreChunk(chunk: string, filename: string, keywords: string[]) {
-  const lowerChunk = chunk.toLowerCase();
-  const lowerFile = filename.toLowerCase();
-
-  return keywords.reduce((score, keyword) => {
-    const matches = lowerChunk.match(new RegExp(`\\b${escapeRegExp(keyword)}\\b`, "g"))?.length ?? 0;
-    const fileBonus = lowerFile.includes(keyword) ? 2 : 0;
-
-    return score + matches + fileBonus;
-  }, 0);
+function escapeLikePattern(value: string) {
+  return value.replace(/[\\%_]/g, "\\$&");
 }
 
-async function loadDocuments(question: string) {
-  const keywords = keywordsFromQuestion(question);
+function keywordTerms(question: string) {
+  const uniqueTerms: string[] = [];
+  const terms = question.toLowerCase().match(/[a-z0-9]+/g) ?? [];
 
-  if (keywords.length === 0) {
-    const recent = await query<DocumentRow>(
-      `SELECT id, filename, content, created_at
-       FROM documents
-       ORDER BY created_at DESC
-       LIMIT 15`,
-    );
+  for (const term of terms) {
+    if (term.length < 2 || uniqueTerms.includes(term)) {
+      continue;
+    }
 
-    return { documents: recent.rows, keywords };
+    uniqueTerms.push(term);
+
+    if (uniqueTerms.length >= 8) {
+      break;
+    }
   }
 
-  const conditions = keywords
-    .map((_, index) => `(content ILIKE $${index + 1} OR filename ILIKE $${index + 1})`)
-    .join(" OR ");
-  const patterns = keywords.map((keyword) => `%${keyword}%`);
-
-  const matched = await query<DocumentRow>(
-    `SELECT id, filename, content, created_at
-     FROM documents
-     WHERE ${conditions}
-     ORDER BY created_at DESC
-     LIMIT 25`,
-    patterns,
-  );
-
-  if (matched.rows.length > 0) {
-    return { documents: matched.rows, keywords };
-  }
-
-  const recent = await query<DocumentRow>(
-    `SELECT id, filename, content, created_at
-     FROM documents
-     ORDER BY created_at DESC
-     LIMIT 15`,
-  );
-
-  return { documents: recent.rows, keywords };
+  return uniqueTerms;
 }
 
-async function relevantCitations(question: string) {
-  const { documents, keywords } = await loadDocuments(question);
-
+function citationsFromDocuments(documents: SimilarDocumentRow[]) {
   return documents
-    .flatMap((document) =>
-      chunkText(document.content)
-        .map((chunk) => ({
-          document_id: document.id,
-          filename: document.filename,
-          excerpt: truncate(chunk, 280),
-          score: scoreChunk(chunk, document.filename, keywords),
-        }))
-        .filter((item) => item.score > 0),
-    )
+    .flatMap((document) => {
+      const similarity = Number(document.similarity);
+
+      return chunkText(document.content).map((chunk) => ({
+        document_id: document.id,
+        filename: document.filename,
+        excerpt: truncate(chunk, 280),
+        score: similarity,
+      }));
+    })
     .sort((left, right) => right.score - left.score)
     .slice(0, 5);
+}
+
+async function queryDocumentsByKeywordMatch(question: string) {
+  const terms = keywordTerms(question);
+
+  if (terms.length === 0) {
+    return { rows: [] as SimilarDocumentRow[] };
+  }
+
+  const patterns = terms.map((term) => `%${escapeLikePattern(term)}%`);
+  const matchClauses = patterns
+    .map(
+      (_, index) =>
+        `(content ILIKE $${index + 1} ESCAPE '\\' OR filename ILIKE $${index + 1} ESCAPE '\\')`,
+    )
+    .join(" OR ");
+  const scoreClauses = patterns
+    .map(
+      (_, index) =>
+        `CASE WHEN (content ILIKE $${index + 1} ESCAPE '\\' OR filename ILIKE $${index + 1} ESCAPE '\\') THEN 1 ELSE 0 END`,
+    )
+    .join(" + ");
+
+  return query<SimilarDocumentRow>(
+    `SELECT id, filename, content, created_at, (${scoreClauses})::float / ${patterns.length} AS similarity
+     FROM documents
+     WHERE ${matchClauses}
+     ORDER BY similarity DESC, created_at DESC
+     LIMIT 5`,
+    patterns,
+  );
+}
+
+async function relevantCitations(question: string): Promise<RetrievedCitations> {
+  try {
+    const { embedding: questionEmbedding } = await generateEmbedding(question, {
+      model: "nomic-embed-text",
+    });
+
+    const documents = await queryDocumentsBySimilarity<SimilarDocumentRow>(questionEmbedding, 0.75, 5);
+
+    if (documents.rows.length === 0) {
+      return {
+        citations: [],
+        retrievalMethod: "vector",
+      };
+    }
+
+    return {
+      citations: citationsFromDocuments(documents.rows),
+      retrievalMethod: "vector",
+    };
+  } catch (error) {
+    console.warn("Vector retrieval failed, falling back to keyword retrieval.", error);
+
+    try {
+      const documents = await queryDocumentsByKeywordMatch(question);
+
+      return {
+        citations: citationsFromDocuments(documents.rows),
+        retrievalMethod: "keyword",
+      };
+    } catch {
+      return {
+        citations: [],
+        retrievalMethod: "keyword",
+      };
+    }
+  }
 }
 
 async function storeConversation(question: string, answer: string, citations: Citation[]) {
@@ -234,7 +244,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const citations = await relevantCitations(question);
+    const { citations, retrievalMethod } = await relevantCitations(question);
 
     if (citations.length === 0) {
       const answer = "The answer is not in the knowledge base.";
@@ -248,13 +258,17 @@ export async function POST(request: Request) {
           grounded: false,
           notInKnowledgeBase: true,
           stored,
+          retrieval_method: retrievalMethod,
         },
         { status: 200 },
       );
     }
 
     const context = citations
-      .map((citation, index) => `[${index + 1}] ${citation.filename}\n${citation.excerpt}`)
+      .map(
+        (citation, index) =>
+          `[${index + 1}] ${citation.filename} (similarity: ${citation.score.toFixed(3)})\n${citation.excerpt}`,
+      )
       .join("\n\n");
 
     let answer = "The answer is not in the mining operations knowledge base.";
@@ -286,6 +300,7 @@ export async function POST(request: Request) {
         grounded,
         notInKnowledgeBase: !grounded,
         stored,
+        retrieval_method: retrievalMethod,
       },
       { status: 200 },
     );
