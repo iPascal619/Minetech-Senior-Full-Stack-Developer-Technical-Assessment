@@ -98,7 +98,8 @@ async function readPayload(request: Request) {
   if (contentType.includes("multipart/form-data")) {
     const formData = await request.formData();
     const fileEntry = formData.get("document") ?? formData.get("file");
-    const filename = typeof formData.get("filename") === "string" ? formData.get("filename") : "site-document.txt";
+    const filenameEntry = formData.get("filename");
+    const filename = typeof filenameEntry === "string" ? filenameEntry : "site-document.txt";
 
     if (fileEntry instanceof File) {
       return {
@@ -168,7 +169,10 @@ export async function POST(request: Request) {
 
   const payload = await readPayload(request);
 
-  const filename = sanitizeFilename(payload.filename || "site-document.txt", "site-document.txt");
+  const filename = sanitizeFilename(
+    typeof payload.filename === "string" ? payload.filename : "site-document.txt",
+    "site-document.txt",
+  );
   const contentResult = DOCUMENT_CONTENT_SCHEMA.safeParse(payload.content);
 
   if (filename.length > MAX_DOCUMENT_FILENAME_LENGTH) {

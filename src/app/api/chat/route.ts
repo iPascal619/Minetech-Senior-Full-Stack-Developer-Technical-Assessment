@@ -8,6 +8,7 @@ import { generateEmbedding, generateResponseStream } from "@/lib/ollama";
 export const runtime = "nodejs";
 
 const MIN_RETRIEVAL_SCORE = 0.75;
+const MIN_KEYWORD_RETRIEVAL_SCORE = 0.2;
 const QUESTION_SCHEMA = createSanitizedTextSchema({ maxLength: MAX_CHAT_QUESTION_LENGTH });
 
 type ChatBody = {
@@ -176,23 +177,39 @@ async function relevantCitations(question: string): Promise<RetrievedCitations> 
       5,
     );
 
-    if (documents.rows.length === 0) {
+    if (documents.rows.length > 0) {
       return {
-        citations: [],
+        citations: citationsFromDocuments(documents.rows),
         retrievalMethod: "vector",
       };
     }
 
+    console.warn("Vector retrieval returned no matches, falling back to keyword retrieval.");
+
+    const keywordDocuments = await queryDocumentsByKeywordMatch(question);
+    const aboveThreshold = keywordDocuments.rows.filter(
+      (document) => Number(document.similarity) >= MIN_KEYWORD_RETRIEVAL_SCORE,
+    );
+
+    if (aboveThreshold.length > 0) {
+      return {
+        citations: citationsFromDocuments(aboveThreshold),
+        retrievalMethod: "keyword",
+      };
+    }
+
     return {
-      citations: citationsFromDocuments(documents.rows),
-      retrievalMethod: "vector",
+      citations: [],
+      retrievalMethod: "keyword",
     };
   } catch (error) {
     console.warn("Vector retrieval failed, falling back to keyword retrieval.", error);
 
     try {
       const documents = await queryDocumentsByKeywordMatch(question);
-      const aboveThreshold = documents.rows.filter((document) => Number(document.similarity) >= MIN_RETRIEVAL_SCORE);
+      const aboveThreshold = documents.rows.filter(
+        (document) => Number(document.similarity) >= MIN_KEYWORD_RETRIEVAL_SCORE,
+      );
 
       if (aboveThreshold.length === 0) {
         return {

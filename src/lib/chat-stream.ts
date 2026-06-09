@@ -52,6 +52,8 @@ export async function readChatStream(response: Response, handlers: ChatStreamHan
         case "meta":
           handlers.onMeta?.(parsed);
           break;
+        case "status":
+          break;
         case "delta":
           handlers.onDelta?.(typeof (parsed as { chunk?: unknown }).chunk === "string" ? (parsed as { chunk: string }).chunk : "");
           break;

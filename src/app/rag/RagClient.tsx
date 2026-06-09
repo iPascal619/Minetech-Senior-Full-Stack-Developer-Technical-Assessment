@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 
 import { readChatStream } from "@/lib/chat-stream";
 
@@ -51,6 +50,32 @@ type ChatResponse = {
   retrieval_method?: string;
 };
 
+type DocumentDetail = {
+  id: string;
+  filename: string;
+  content: string;
+  created_at: string;
+  content_length: number;
+};
+
+type DocumentDetailResponse = {
+  success?: boolean;
+  document?: DocumentDetail;
+  error?: string;
+};
+
+type SavedChatMessage = Pick<ChatMessage, "role" | "text" | "citations" | "grounded" | "notInKnowledgeBase" | "createdAt">;
+
+type SavedChatConversation = {
+  id: string;
+  title: string;
+  savedAt: string;
+  messages: SavedChatMessage[];
+};
+
+const SAVED_CHATS_STORAGE_KEY = "rag.saved-chats.v1";
+const MAX_SAVED_CHATS = 10;
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en", {
     dateStyle: "medium",
@@ -58,10 +83,132 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function formatDateOnly(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+  }).format(new Date(value));
+}
+
+function formatFileSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B";
+  }
+
+  const units = ["B", "KB", "MB", "GB"];
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / 1024 ** unitIndex;
+
+  return `${value >= 10 || unitIndex === 0 ? Math.round(value) : value.toFixed(1)} ${units[unitIndex]}`;
+}
+
 function makeId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function DocumentIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
+      <path d="M4.5 2.75h4.9l2.85 2.85v7.65a1 1 0 0 1-1 1h-6.75a1 1 0 0 1-1-1v-9.5a1 1 0 0 1 1-1Z" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+      <path d="M9.4 2.75v3.1h3.1" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+      <path d="M6 8h4M6 10.5h3.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function UploadIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-5 w-5">
+      <path d="M8 11V3.75" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M5.25 6 8 3.25 10.75 6" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3.75 12.5h8.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
+      <path d="M12.5 6.25A4.75 4.75 0 0 0 4.1 4.1" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M4.1 4.1V6.9H6.9" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3.5 9.75A4.75 4.75 0 0 0 11.9 11.9" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M11.9 11.9V9.1H9.1" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
+      <path d="M3.5 4.25h9" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M6.25 4.25V3.5A.75.75 0 0 1 7 2.75h2A.75.75 0 0 1 9.75 3.5v.75" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+      <path d="M5.25 4.25l.5 8h4.5l.5-8" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SendIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-4 w-4">
+      <path d="M3.25 8h8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M8.25 4.75L12 8l-3.75 3.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DatabaseIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
+      <ellipse cx="8" cy="4.25" rx="4.75" ry="1.75" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M3.25 4.25v7.25c0 .97 2.13 1.75 4.75 1.75s4.75-.78 4.75-1.75V4.25" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+      <path d="M3.25 8c0 .97 2.13 1.75 4.75 1.75s4.75-.78 4.75-1.75" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
+      <rect x="2.25" y="3" width="11.5" height="10.75" rx="2" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M2.25 6h11.5" stroke="currentColor" strokeWidth="1.25" />
+      <path d="M5 2.25v2.5M11 2.25v2.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CitationIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
+      <path d="M5.25 11.75h1.5V8.5H4.5V5.75h3v6H5.25Zm5.25 0h1.5V8.5H9.75V5.75h3v6h-3.25Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function HeroChip({ icon, children, className = "" }: { icon: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <span
+      className={[
+        "inline-flex items-center gap-2 rounded-[8px] border-[0.5px] border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-normal leading-none text-slate-600",
+        className,
+      ].join(" ")}
+    >
+      <span className="text-slate-400">{icon}</span>
+      <span>{children}</span>
+    </span>
+  );
+}
+
+function MessageCitation({ index }: { index: number }) {
+  return (
+    <span className="inline-flex h-5 items-center rounded-[8px] border-[0.5px] border-sky-200 bg-sky-50 px-1.5 text-[11px] font-normal leading-none text-sky-800 align-middle">
+      [{index}]
+    </span>
+  );
+}
+
+function formatFileSizeFromText(text: string) {
+  return `${Math.max(1, Math.round(text.length / 4))} chars`;
 }
 
 export default function RagPage() {
@@ -76,13 +223,157 @@ export default function RagPage() {
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
+  const [chatStatusMessage, setChatStatusMessage] = useState<string | null>(null);
+  const [savedChats, setSavedChats] = useState<SavedChatConversation[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [selectedSource, setSelectedSource] = useState<DocumentDetail | null>(null);
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceError, setSourceError] = useState<string | null>(null);
   const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const chatViewportRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     void loadDocuments();
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      const rawSavedChats = window.localStorage.getItem(SAVED_CHATS_STORAGE_KEY);
+
+      if (!rawSavedChats) {
+        return;
+      }
+
+      const parsed = JSON.parse(rawSavedChats) as SavedChatConversation[];
+
+      if (Array.isArray(parsed)) {
+        setSavedChats(parsed);
+      }
+    } catch {
+      setSavedChats([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    const viewport = chatViewportRef.current;
+
+    if (!viewport) {
+      return;
+    }
+
+    viewport.scrollTop = viewport.scrollHeight;
+  }, [messages]);
+
+  const latestDocument = documents[0] ?? null;
+  const documentCountLabel = documents.length === 1 ? "1 document" : `${documents.length} documents`;
+  const latestIngestionLabel = latestDocument ? formatDateOnly(latestDocument.created_at) : "No ingestions yet";
+
+  function handleFileDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+
+    const droppedFile = event.dataTransfer.files?.[0] ?? null;
+
+    if (!droppedFile) {
+      return;
+    }
+
+    setSelectedFile(droppedFile);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function clearSelectedFile() {
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
+  function persistSavedChats(nextChats: SavedChatConversation[]) {
+    setSavedChats(nextChats);
+
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(SAVED_CHATS_STORAGE_KEY, JSON.stringify(nextChats));
+    } catch {
+      // Ignore storage failures so chat remains usable.
+    }
+  }
+
+  function handleStoreChat() {
+    const storedMessages = messages
+      .filter((message) => !message.isTyping)
+      .map((message) => ({
+        role: message.role,
+        text: message.text,
+        citations: message.citations,
+        grounded: message.grounded,
+        notInKnowledgeBase: message.notInKnowledgeBase,
+        createdAt: message.createdAt,
+      }));
+
+    if (storedMessages.length === 0) {
+      setChatStatusMessage("Start a conversation before storing it.");
+      return;
+    }
+
+    const firstUserMessage = storedMessages.find((message) => message.role === "user")?.text;
+    const titleSource = firstUserMessage ?? storedMessages[0]?.text ?? "Chat";
+    const title = titleSource.length > 42 ? `${titleSource.slice(0, 39).trimEnd()}...` : titleSource;
+    const savedConversation: SavedChatConversation = {
+      id: makeId(),
+      title,
+      savedAt: new Date().toISOString(),
+      messages: storedMessages,
+    };
+
+    persistSavedChats([savedConversation, ...savedChats].slice(0, MAX_SAVED_CHATS));
+    setChatStatusMessage("Chat stored locally.");
+  }
+
+  function handleNewChat() {
+    setMessages([]);
+    setQuestion("");
+    setChatError(null);
+    setChatStatusMessage(null);
+  }
+
+  async function openCitationSource(citation: Citation) {
+    setSourceError(null);
+    setSourceLoading(true);
+
+    try {
+      const response = await fetch(`/api/documents/${citation.document_id}`, {
+        cache: "no-store",
+      });
+      const data = (await response.json()) as DocumentDetailResponse;
+
+      if (!response.ok || !data.success || !data.document) {
+        throw new Error(data.error ?? "Failed to load the cited document.");
+      }
+
+      setSelectedSource(data.document);
+    } catch (error) {
+      setSourceError(error instanceof Error ? error.message : "Failed to load the cited document.");
+    } finally {
+      setSourceLoading(false);
+    }
+  }
+
+  function closeCitationSource() {
+    setSelectedSource(null);
+    setSourceError(null);
+    setSourceLoading(false);
+  }
 
   async function loadDocuments() {
     setDocumentError(null);
@@ -285,7 +576,7 @@ export default function RagPage() {
               message.id === pendingAssistantId
                 ? {
                     ...message,
-                    citations: payload.citations ?? [],
+                    citations: (payload.citations ?? []) as Citation[],
                     grounded: Boolean(payload.grounded),
                     notInKnowledgeBase: Boolean(payload.notInKnowledgeBase),
                   }
@@ -317,7 +608,7 @@ export default function RagPage() {
                 ? {
                     ...message,
                     text: payload.answer ?? message.text,
-                    citations: payload.citations ?? message.citations,
+                    citations: (payload.citations ?? message.citations) as Citation[],
                     grounded: Boolean(payload.grounded),
                     notInKnowledgeBase: Boolean(payload.notInKnowledgeBase),
                     isTyping: false,
@@ -341,119 +632,110 @@ export default function RagPage() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden px-4 py-6 sm:px-6 lg:px-8">
-      <div className="absolute inset-x-0 top-0 -z-10 h-[24rem] bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.16),transparent_36%),radial-gradient(circle_at_top_right,rgba(14,165,233,0.16),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.94),rgba(241,245,249,0.7))]" />
-
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <header className="rounded-[1.75rem] border border-white/70 bg-white/80 p-6 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.65)] backdrop-blur-xl">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-            <div className="max-w-2xl">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
-                Mining Operations Knowledge Base
-              </p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-                Ask questions against site documents and see cited answers.
-              </h1>
-              <p className="mt-3 text-base leading-7 text-slate-600">
-                Upload inspection notes, maintenance logs, and safety procedures to PostgreSQL,
-                retrieve relevant chunks, and answer with the same local Ollama model.
-              </p>
-            </div>
-
-            <nav className="flex flex-wrap gap-3 text-sm font-medium text-slate-600">
-              <Link
-                href="/"
-                className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 transition hover:border-slate-300 hover:bg-white"
-              >
-                Home
-              </Link>
-              <Link
-                href="/triage"
-                className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
-              >
-                Incident Triage
-              </Link>
-            </nav>
+    <main className="min-h-screen bg-background px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-4">
+        <header className="flex flex-col gap-4 rounded-[16px] border-[0.5px] border-slate-200 bg-white px-4 py-4 sm:px-5 sm:py-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-2xl space-y-1.5">
+            <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-slate-500">
+              Mining operations knowledge base
+            </p>
+            <h1 className="text-[20px] font-medium leading-tight text-slate-950">Site intelligence</h1>
+            <p className="text-[13px] font-normal leading-5 text-slate-600">
+              Ask questions against indexed site documents and get cited answers.
+            </p>
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200/80">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-                Knowledge base entries
-              </p>
-              <p className="mt-2 text-3xl font-semibold text-slate-950">{documents.length}</p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200/80">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-                Latest ingestion
-              </p>
-              <p className="mt-2 text-lg font-semibold text-slate-950">
-                {documents[0] ? formatDate(documents[0].created_at) : "Waiting for upload"}
-              </p>
-            </div>
-            <div className="rounded-2xl bg-slate-50 px-4 py-4 ring-1 ring-slate-200/80">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-                Cited answers
-              </p>
-              <p className="mt-2 text-lg font-semibold text-slate-950">Citations shown in every reply</p>
-            </div>
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            <HeroChip icon={<DatabaseIcon />}>Knowledge base entries · {documentCountLabel}</HeroChip>
+            <HeroChip icon={<CalendarIcon />}>Latest ingestion · {latestIngestionLabel}</HeroChip>
+            <HeroChip icon={<CitationIcon />}>Citations in every reply</HeroChip>
           </div>
         </header>
 
-        <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
-          <div className="space-y-6">
-            <section className="rounded-[1.75rem] border border-white/70 bg-white/85 p-6 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.65)] backdrop-blur-xl">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-950">
-                  Add to the mining operations knowledge base
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Upload a text file or paste the extracted report text. The document is stored in
-                  PostgreSQL for retrieval across the mine site.
+        <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,45%)_minmax(0,55%)]">
+          <section className="flex h-full min-w-0 flex-col rounded-[16px] border-[0.5px] border-slate-200 bg-white">
+            <div className="flex-1 space-y-6 px-4 py-4 sm:px-5 sm:py-5">
+              <div className="space-y-1.5">
+                <h2 className="text-[14px] font-medium leading-5 text-slate-950">Add a document</h2>
+                <p className="text-[12px] font-normal leading-5 text-slate-600">
+                  Upload a file or paste report text to index it into the knowledge base.
                 </p>
               </div>
 
-              <form className="mt-6 space-y-4" onSubmit={handleUpload}>
-                <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-slate-700">
-                    Optional filename
-                  </span>
+              <form className="space-y-4" onSubmit={handleUpload}>
+                <label className="block space-y-1.5">
+                  <span className="block text-[12px] font-medium text-slate-500">Document name (optional)</span>
                   <input
                     value={documentName}
                     onChange={(event) => setDocumentName(event.target.value)}
-                    placeholder="site-safety-briefing.txt"
-                    className="w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-inner outline-none transition placeholder:text-slate-400 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+                    placeholder="e.g. shaft-b2-inspection.txt"
+                    className="h-9 w-full rounded-[8px] border-[0.5px] border-slate-200 bg-white px-3 text-[13px] font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus-visible:border-sky-300 focus-visible:ring-2 focus-visible:ring-sky-100"
                   />
                 </label>
 
-                <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-slate-700">Upload site file</span>
+                <div className="relative space-y-1.5">
+                  <span className="block text-[12px] font-medium text-slate-500">Upload file</span>
                   <input
+                    id="rag-upload-input"
                     ref={fileInputRef}
                     type="file"
-                    accept=".txt,.md,.csv,.json,.log,.html,.htm"
+                    accept=".txt,.pdf"
                     onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-                    className="block w-full rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600 file:mr-4 file:rounded-full file:border-0 file:bg-slate-950 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:border-slate-400"
+                    className="sr-only"
                   />
-                </label>
+                  <label
+                    htmlFor="rag-upload-input"
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={handleFileDrop}
+                    className="relative flex min-h-[120px] cursor-pointer flex-col items-center justify-center rounded-[12px] border-[0.5px] border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center transition hover:border-slate-400 hover:bg-slate-100/60"
+                  >
+                    {selectedFile ? (
+                      <div className="flex max-w-full items-start gap-3 text-left">
+                        <span className="mt-0.5 text-slate-500">
+                          <UploadIcon />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-[13px] font-medium text-slate-900">{selectedFile.name}</p>
+                          <p className="mt-1 text-[11px] font-normal text-slate-500">{formatFileSize(selectedFile.size)}</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="text-slate-500">
+                          <UploadIcon />
+                        </span>
+                        <p className="text-[13px] font-normal text-slate-600">Drop a file here or click to browse</p>
+                        <p className="text-[11px] font-normal text-slate-500">Supports .txt and .pdf</p>
+                      </div>
+                    )}
+                  </label>
+                  {selectedFile ? (
+                    <button
+                      type="button"
+                      onClick={clearSelectedFile}
+                      className="absolute right-3 top-10 inline-flex h-6 w-6 items-center justify-center rounded-[8px] border-[0.5px] border-slate-200 bg-white text-[13px] font-medium leading-none text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                      aria-label="Clear selected file"
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </div>
 
-                <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-slate-700">
-                    Or paste site document text
-                  </span>
+                <label className="block space-y-1.5">
+                  <span className="block text-[12px] font-medium text-slate-500">Or paste document text</span>
                   <textarea
                     value={documentText}
                     onChange={(event) => setDocumentText(event.target.value)}
-                    placeholder="Paste the extracted report text here if you are not uploading a file."
-                    className="min-h-44 w-full rounded-3xl border border-slate-200 bg-white px-4 py-3 text-sm leading-7 text-slate-900 shadow-inner outline-none transition placeholder:text-slate-400 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
+                    placeholder="Paste extracted report text here…"
+                    className="h-[120px] w-full resize-none rounded-[8px] border-[0.5px] border-slate-200 bg-white px-3 py-2.5 text-[13px] font-normal leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus-visible:border-sky-300 focus-visible:ring-2 focus-visible:ring-sky-100"
                   />
                 </label>
 
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="submit"
                     disabled={uploading}
-                    className="inline-flex items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex h-8 items-center justify-center rounded-[8px] border-[0.5px] border-slate-900 bg-slate-900 px-3.5 text-[12px] font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {uploading ? "Indexing document..." : "Index document"}
                   </button>
@@ -462,12 +744,9 @@ export default function RagPage() {
                     onClick={() => {
                       setDocumentName("");
                       setDocumentText("");
-                      setSelectedFile(null);
-                      if (fileInputRef.current) {
-                        fileInputRef.current.value = "";
-                      }
+                      clearSelectedFile();
                     }}
-                    className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-50"
+                    className="inline-flex h-8 items-center justify-center rounded-[8px] border-[0.5px] border-slate-200 bg-white px-3.5 text-[12px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
                   >
                     Clear
                   </button>
@@ -475,220 +754,284 @@ export default function RagPage() {
               </form>
 
               {uploadError ? (
-                <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                <div className="rounded-[12px] border-[0.5px] border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-normal text-rose-700">
                   {uploadError}
                 </div>
               ) : null}
 
               {uploadMessage ? (
-                <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <div className="rounded-[12px] border-[0.5px] border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-normal text-emerald-800">
                   {uploadMessage}
                 </div>
               ) : null}
-            </section>
 
-            <section className="rounded-[1.75rem] border border-white/70 bg-white/85 p-6 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.65)] backdrop-blur-xl">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-xl font-semibold text-slate-950">
-                    Mining operations knowledge base
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    Recently ingested site documents available for retrieval.
-                  </p>
+              {documentError ? (
+                <div className="rounded-[12px] border-[0.5px] border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-normal text-rose-700">
+                  {documentError}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void loadDocuments()}
-                  className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-white"
-                >
-                  Refresh
-                </button>
-              </div>
+              ) : null}
 
-              <div className="mt-5 space-y-3">
+              <div className="space-y-3 border-t-[0.5px] border-slate-200 pt-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1.5">
+                    <h2 className="text-[14px] font-medium leading-5 text-slate-950">Indexed documents</h2>
+                    <p className="text-[12px] font-normal leading-5 text-slate-600">
+                      Recently ingested site documents available for retrieval.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadDocuments()}
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border-[0.5px] border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                    aria-label="Refresh"
+                    title="Refresh"
+                  >
+                    <RefreshIcon />
+                  </button>
+                </div>
+
                 {documents.length === 0 ? (
-                  <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-sm text-slate-500">
-                    No mining documents have been indexed yet.
+                  <div className="grid py-8 text-center text-[12px] font-normal text-slate-500">
+                    No documents indexed yet.
                   </div>
                 ) : (
-                  documents.map((document) => (
-                    <article
-                      key={document.id}
-                      className="rounded-3xl border border-slate-200 bg-white px-5 py-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <h3 className="font-semibold text-slate-950">{document.filename}</h3>
-                          <p className="mt-1 text-sm text-slate-500">
-                            {document.content_length.toLocaleString()} characters
-                          </p>
+                  <ul className="divide-y-[0.5px] divide-slate-200">
+                    {documents.map((document) => (
+                      <li key={document.id} className="flex items-start justify-between gap-3 py-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start gap-2">
+                            <span className="mt-0.5 shrink-0 text-slate-400">
+                              <DocumentIcon />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-[13px] font-medium leading-5 text-slate-950">
+                                {document.filename}
+                              </p>
+                              <p className="mt-0.5 text-[11px] font-normal leading-5 text-slate-500">
+                                {document.content_length.toLocaleString()} characters
+                              </p>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-3">
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                            {formatDate(document.created_at)}
-                          </span>
+
+                        <div className="flex shrink-0 items-start gap-3 pl-2 text-right">
+                          <p className="pt-0.5 text-[11px] font-normal leading-5 text-slate-500">
+                            {formatDateOnly(document.created_at)}
+                          </p>
                           <button
                             type="button"
                             onClick={() => void handleDeleteDocument(document.id)}
                             disabled={deletingDocumentId === document.id}
-                            className="inline-flex items-center justify-center rounded-full border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:border-rose-300 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border-0 bg-transparent text-rose-600 transition hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            aria-label={`Delete ${document.filename}`}
+                            title="Delete"
                           >
-                            {deletingDocumentId === document.id ? "Deleting..." : "Delete"}
+                            <TrashIcon />
                           </button>
                         </div>
-                      </div>
-                    </article>
-                  ))
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </section>
+
+          <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-[16px] border-[0.5px] border-slate-200 bg-white">
+            <div className="px-4 py-4 sm:px-5 sm:py-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1.5">
+                  <h2 className="text-[14px] font-medium leading-5 text-slate-950">Site intelligence chat</h2>
+                  <p className="text-[12px] font-normal leading-5 text-slate-600">
+                    Ask about safety procedures, drill operations, or production data.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleStoreChat}
+                    disabled={messages.length === 0 || asking}
+                    className="inline-flex h-8 items-center justify-center rounded-[8px] border-[0.5px] border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Store chat
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleNewChat}
+                    className="inline-flex h-8 items-center justify-center rounded-[8px] border-[0.5px] border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                  >
+                    New chat
+                  </button>
+                </div>
+              </div>
+              <p className="mt-2 text-[11px] font-normal text-slate-500">
+                Stored chats: {savedChats.length} {chatStatusMessage ? `• ${chatStatusMessage}` : null}
+              </p>
+            </div>
+
+            <div className="flex min-h-0 flex-1 flex-col border-t-[0.5px] border-slate-200">
+              <div
+                ref={chatViewportRef}
+                className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5"
+              >
+                {chatError ? (
+                  <div className="mb-4 rounded-[12px] border-[0.5px] border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-normal text-rose-700">
+                    {chatError}
+                  </div>
+                ) : null}
+
+                {messages.length === 0 ? (
+                  <div className="grid h-full min-h-[240px] place-items-center px-6 text-center">
+                    <p className="max-w-[320px] text-[13px] font-normal leading-[1.6] text-slate-500">
+                      Ready when you are. Try asking: "What are the safety protocols for shaft B2?" or "Summarise the latest inspection report."
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {messages.map((message) => {
+                      const isAssistant = message.role === "assistant";
+                      const bubbleClasses = isAssistant
+                        ? "border-[0.5px] border-slate-200 bg-white text-slate-700"
+                        : "border-[0.5px] border-slate-200 bg-slate-50 text-slate-700";
+
+                      return (
+                        <div
+                          key={message.id}
+                          className={`flex ${isAssistant ? "justify-start" : "justify-end"}`}
+                        >
+                          <div className={`max-w-[75%] rounded-[12px] px-3.5 py-2.5 text-[13px] font-normal leading-6 ${bubbleClasses}`}>
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between gap-3 text-[11px] font-normal text-slate-500">
+                                <span>{isAssistant ? "Assistant" : "You"}</span>
+                                <span>{formatDate(message.createdAt)}</span>
+                              </div>
+
+                              {message.isTyping ? (
+                                <div className="space-y-2">
+                                  {message.text ? <p className="whitespace-pre-wrap">{message.text}</p> : null}
+                                  <div className="flex items-center gap-1.5 text-slate-500" aria-live="polite">
+                                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: "0ms" }} />
+                                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: "140ms" }} />
+                                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-slate-400" style={{ animationDelay: "280ms" }} />
+                                    <span className="pl-1 text-[12px] font-normal text-slate-500">Thinking through the indexed documents…</span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="whitespace-pre-wrap">
+                                  {message.text}
+                                  {isAssistant && message.citations.length > 0 ? (
+                                    <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
+                                      {message.citations.map((citation, citationIndex) => (
+                                        <button
+                                          key={`${citation.document_id}-${citationIndex}`}
+                                          type="button"
+                                          onClick={() => void openCitationSource(citation)}
+                                          className="inline-flex align-middle"
+                                          aria-label={`Open source ${citation.filename}`}
+                                          title={citation.filename}
+                                        >
+                                          <MessageCitation index={citationIndex + 1} />
+                                        </button>
+                                      ))}
+                                    </span>
+                                  ) : null}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
 
-              {documentError ? (
-                <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                  {documentError}
-                </div>
-              ) : null}
-            </section>
-          </div>
-
-          <section className="rounded-[1.75rem] border border-white/70 bg-white/85 p-6 shadow-[0_18px_60px_-38px_rgba(15,23,42,0.65)] backdrop-blur-xl">
-            <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-slate-950">Site intelligence chat</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
-                  Ask about safety procedures, drill operations, or production issues. The assistant
-                  will retrieve context and show cited answers.
-                </p>
-              </div>
-
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700 ring-1 ring-emerald-200">
-                {messages.length} messages
-              </span>
-            </div>
-
-            <form className="mt-5 flex flex-col gap-3 sm:flex-row" onSubmit={handleQuestionSubmit}>
-              <input
-                value={question}
-                  maxLength={2000}
-                onChange={(event) => setQuestion(event.target.value)}
-                placeholder="What are the safety protocols for underground drilling operations?"
-                className="flex-1 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm text-slate-900 shadow-inner outline-none transition placeholder:text-slate-400 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
-              />
-              <button
-                type="submit"
-                disabled={asking}
-                className="rounded-full bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:-translate-y-0.5 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {asking ? "Checking knowledge base..." : "Ask knowledge base"}
-              </button>
-            </form>
-
-            {chatError ? (
-              <div className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-                {chatError}
-              </div>
-            ) : null}
-
-            <div className="mt-6 space-y-4">
-              {messages.length === 0 ? (
-                <div className="rounded-[1.5rem] border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-sm leading-7 text-slate-500">
-                  No messages yet. Upload a site document and ask a question to see cited answers.
-                </div>
-              ) : (
-                messages.map((message) => (
-                  <article
-                    key={message.id}
-                    className={`rounded-[1.5rem] border px-5 py-4 shadow-sm ${
-                      message.role === "user"
-                        ? "border-slate-200 bg-slate-50"
-                        : message.isTyping
-                          ? "border-slate-200 bg-slate-50"
-                          : message.notInKnowledgeBase
-                            ? "border-amber-200 bg-amber-50"
-                            : "border-emerald-200 bg-emerald-50"
-                    }`}
+              <form className="border-t-[0.5px] border-slate-200 p-3 sm:p-3" onSubmit={handleQuestionSubmit}>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={question}
+                    maxLength={2000}
+                    onChange={(event) => setQuestion(event.target.value)}
+                    placeholder="Ask a question about your site documents…"
+                    className="h-9 flex-1 rounded-[8px] border-[0.5px] border-slate-200 bg-white px-3 text-[13px] font-normal text-slate-900 outline-none transition placeholder:text-slate-400 focus-visible:border-sky-300 focus-visible:ring-2 focus-visible:ring-sky-100"
+                  />
+                  <button
+                    type="submit"
+                    disabled={asking}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border-[0.5px] border-slate-900 bg-slate-900 text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                    aria-label="Send question"
+                    title="Send question"
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-                          {message.role === "user" ? "Question" : message.isTyping ? "Answer" : "Answer"}
-                        </p>
-                        <p className="mt-1 text-sm text-slate-500">{formatDate(message.createdAt)}</p>
-                      </div>
-
-                      {message.role === "assistant" && !message.isTyping ? (
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] ${
-                            message.notInKnowledgeBase
-                              ? "bg-amber-100 text-amber-800 ring-1 ring-amber-200"
-                              : "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200"
-                          }`}
-                        >
-                          {message.notInKnowledgeBase ? "Outside knowledge base" : "Cited answer"}
-                        </span>
-                      ) : null}
-                    </div>
-
-                    {message.isTyping ? (
-                      <div className="mt-4 space-y-3 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-                        {message.text ? (
-                          <p className="whitespace-pre-wrap leading-7 text-slate-700">{message.text}</p>
-                        ) : null}
-                        <div className="flex items-center gap-3" aria-live="polite">
-                          <span className="inline-flex items-center gap-1">
-                            <span
-                              className="h-2 w-2 rounded-full bg-slate-400 animate-bounce"
-                              style={{ animationDelay: "0ms" }}
-                            />
-                            <span
-                              className="h-2 w-2 rounded-full bg-slate-400 animate-bounce"
-                              style={{ animationDelay: "140ms" }}
-                            />
-                            <span
-                              className="h-2 w-2 rounded-full bg-slate-400 animate-bounce"
-                              style={{ animationDelay: "280ms" }}
-                            />
-                          </span>
-                          <span>Checking the mining operations knowledge base...</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-700">
-                        {message.text}
-                      </p>
-                    )}
-
-                    {message.role === "assistant" && !message.isTyping && message.citations.length > 0 ? (
-                      <div className="mt-5 rounded-3xl border border-white/60 bg-white/80 p-4 ring-1 ring-slate-200/80">
-                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-                          Citations
-                        </p>
-                        <div className="mt-3 space-y-3">
-                          {message.citations.map((citation) => (
-                            <div
-                              key={`${citation.document_id}-${citation.excerpt}`}
-                              className="rounded-2xl bg-slate-50 px-4 py-3 ring-1 ring-slate-200/80"
-                            >
-                              <div className="flex flex-wrap items-center justify-between gap-3">
-                                <p className="font-semibold text-slate-950">{citation.filename}</p>
-                                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                                  Score {citation.score}
-                                </span>
-                              </div>
-                              <p className="mt-2 text-sm leading-6 text-slate-600">
-                                {citation.excerpt}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                  </article>
-                ))
-              )}
+                    <SendIcon />
+                  </button>
+                </div>
+              </form>
             </div>
           </section>
         </div>
+
+        {selectedSource || sourceLoading || sourceError ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/30 px-4 py-6 backdrop-blur-[1px]">
+            <div className="w-full max-w-2xl rounded-[16px] border-[0.5px] border-slate-200 bg-white shadow-none">
+              <div className="flex items-start justify-between gap-3 border-b-[0.5px] border-slate-200 px-4 py-4">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-slate-500">Source document</p>
+                  <h3 className="mt-1 truncate text-[14px] font-medium text-slate-950">
+                    {selectedSource?.filename ?? "Loading source..."}
+                  </h3>
+                  {selectedSource ? (
+                    <p className="mt-1 text-[11px] font-normal text-slate-500">
+                      {selectedSource.content_length.toLocaleString()} characters · {formatDate(selectedSource.created_at)}
+                    </p>
+                  ) : null}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={closeCitationSource}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border-[0.5px] border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
+                  aria-label="Close source viewer"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="max-h-[70vh] overflow-y-auto px-4 py-4">
+                {sourceLoading ? (
+                  <p className="text-[12px] font-normal text-slate-500">Loading source document...</p>
+                ) : sourceError ? (
+                  <p className="rounded-[12px] border-[0.5px] border-rose-200 bg-rose-50 px-3 py-2 text-[12px] font-normal text-rose-700">
+                    {sourceError}
+                  </p>
+                ) : selectedSource ? (
+                  <div className="space-y-3">
+                    <div className="rounded-[12px] border-[0.5px] border-slate-200 bg-slate-50 px-3 py-2 text-[12px] font-normal leading-6 text-slate-700">
+                      <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-slate-500">Excerpt</p>
+                      <p className="mt-1 whitespace-pre-wrap">{selectedSource.content.slice(0, 360)}</p>
+                    </div>
+                    <div className="rounded-[12px] border-[0.5px] border-slate-200 bg-white px-3 py-2 text-[12px] font-normal leading-6 text-slate-700">
+                      <p className="text-[11px] font-medium uppercase tracking-[0.5px] text-slate-500">Full text</p>
+                      <p className="mt-1 whitespace-pre-wrap">{selectedSource.content}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void navigator.clipboard?.writeText(selectedSource.content)}
+                        className="inline-flex h-8 items-center justify-center rounded-[8px] border-[0.5px] border-slate-200 bg-white px-3 text-[12px] font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                      >
+                        Copy text
+                      </button>
+                      <span className="text-[11px] font-normal text-slate-500">
+                        {formatFileSizeFromText(selectedSource.content)}
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </main>
   );
