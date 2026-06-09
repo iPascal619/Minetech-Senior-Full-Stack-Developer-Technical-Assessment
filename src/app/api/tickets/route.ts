@@ -1,13 +1,21 @@
 import { randomUUID } from "node:crypto";
 
 import { query } from "@/lib/db";
+import { MAX_TRIAGE_TEXT_LENGTH, createSanitizedTextSchema } from "@/lib/input";
+import { applyRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { cleanText, normalizeCategory, normalizePriority } from "@/lib/normalization";
 import { generateResponse } from "@/lib/ollama";
 import { ensureTicketSchema } from "@/lib/ticket-schema";
+import { parseTriageOutput } from "@/lib/triage-schema";
 import { serializeTicket, type TicketFields, type TicketRow } from "@/lib/ticket-types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const TRIAGE_INPUT_SCHEMA = createSanitizedTextSchema({
+  allowNewlines: true,
+  maxLength: MAX_TRIAGE_TEXT_LENGTH,
+});
 
 type TicketBody = {
   rawText?: unknown;
@@ -42,36 +50,6 @@ function fallbackFields(rawText: string): TicketFields {
   };
 }
 
-function parseLooseJson(text: string) {
-  const trimmed = text.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  const fenced = Array.from(trimmed.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi), (match) => match[1].trim());
-  const candidates = [trimmed, ...fenced, (() => {
-    const startIndex = trimmed.indexOf("{");
-    const endIndex = trimmed.lastIndexOf("}");
-
-    return startIndex >= 0 && endIndex > startIndex ? trimmed.slice(startIndex, endIndex + 1) : "";
-  })()].filter(Boolean);
-
-  for (const candidate of candidates) {
-    try {
-      const parsed = JSON.parse(candidate);
-
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed as Record<string, unknown>;
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return null;
-}
-
 function normalizeTriage(rawText: string, parsed: Record<string, unknown> | null): TriageResult {
   const fallback = fallbackFields(rawText);
   const candidate = parsed ?? {};
@@ -98,10 +76,14 @@ function normalizeTriage(rawText: string, parsed: Record<string, unknown> | null
 async function classifyTicket(rawText: string) {
   const prompt = [
     "Classify the operational incident and return JSON only.",
-    'Schema: {"category":"...","priority":"...","extracted_fields":{"subject":"...","requester":"...","issue_summary":"..."},"suggested_reply":"..."}',
+    'Return exactly one JSON object with this schema: {"category":"...","priority":"...","extracted_fields":{"subject":"...","requester":"...","issue_summary":"..."},"suggested_reply":"..."}',
     "Allowed categories: billing, technical_issue, account_access, bug_report, feature_request, security, general, other.",
     "Allowed priorities: low, medium, high, urgent.",
-    "Do not add markdown or extra commentary.",
+    "Do not add markdown, fences, code blocks, or extra commentary.",
+    "Valid example 1:",
+    '{"category":"technical_issue","priority":"high","extracted_fields":{"subject":"Crusher belt slipping","requester":"Shift supervisor","issue_summary":"The primary crusher belt slipped twice during morning operations and needs immediate inspection."},"suggested_reply":"Thanks for reporting the crusher belt issue. We are treating this as a high-priority technical issue and will inspect the belt tension, drive assembly, and sensors immediately."}',
+    "Valid example 2:",
+    '{"category":"account_access","priority":"medium","extracted_fields":{"subject":"Portal login reset request","requester":"J. Singh","issue_summary":"The requester cannot access the scheduling portal after a password reset."},"suggested_reply":"Thanks for the update. We are reviewing the portal access issue and will confirm the next steps for account recovery shortly."}',
     "Incident report text:",
     rawText,
   ].join("\n\n");
@@ -117,7 +99,7 @@ async function classifyTicket(rawText: string) {
 
     return {
       response,
-      parsed: parseLooseJson(response.text),
+      parsed: parseTriageOutput(response.text),
     };
   };
 
@@ -152,7 +134,17 @@ async function classifyTicket(rawText: string) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const rateLimit = await applyRateLimit(request, {
+    bucket: "/api/tickets",
+    limit: 30,
+    windowMs: 60_000,
+  });
+
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit);
+  }
+
   try {
     await ensureTicketSchema();
 
@@ -172,13 +164,27 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const rateLimit = await applyRateLimit(request, {
+    bucket: "/api/tickets",
+    limit: 10,
+    windowMs: 60_000,
+  });
+
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit);
+  }
+
   await ensureTicketSchema();
 
   const body = (await request.json().catch(() => null)) as TicketBody | null;
-  const rawText = cleanText(body?.rawText ?? body?.raw_text, "");
+  const rawTextResult = TRIAGE_INPUT_SCHEMA.safeParse(body?.rawText ?? body?.raw_text);
+  const rawText = rawTextResult.success ? rawTextResult.data : "";
 
   if (!rawText) {
-    return Response.json({ error: "Incident report text is required." }, { status: 400 });
+    return Response.json(
+      { error: `Incident report text is required and must be ${MAX_TRIAGE_TEXT_LENGTH} characters or fewer.` },
+      { status: 400 },
+    );
   }
 
   const { triage, warning } = await classifyTicket(rawText);

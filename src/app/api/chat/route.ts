@@ -1,9 +1,14 @@
 import { randomUUID } from "node:crypto";
 
 import { query, queryDocumentsBySimilarity } from "@/lib/db";
-import { generateEmbedding, generateResponse } from "@/lib/ollama";
+import { MAX_CHAT_QUESTION_LENGTH, createSanitizedTextSchema } from "@/lib/input";
+import { applyRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { generateEmbedding, generateResponseStream } from "@/lib/ollama";
 
 export const runtime = "nodejs";
+
+const MIN_RETRIEVAL_SCORE = 0.75;
+const QUESTION_SCHEMA = createSanitizedTextSchema({ maxLength: MAX_CHAT_QUESTION_LENGTH });
 
 type ChatBody = {
   question?: unknown;
@@ -33,30 +38,6 @@ type RetrievedCitations = {
   citations: Citation[];
   retrievalMethod: RetrievalMethod;
 };
-
-function cleanText(value: unknown, fallback = "") {
-  if (typeof value === "string") {
-    const compact = value.replace(/\s+/g, " ").trim();
-
-    return compact || fallback;
-  }
-
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-
-  if (value == null) {
-    return fallback;
-  }
-
-  try {
-    const serialized = JSON.stringify(value);
-
-    return serialized ? serialized.replace(/\s+/g, " ").trim() : fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 function truncate(value: string, maxLength: number) {
   const compact = value.replace(/\s+/g, " ").trim();
@@ -189,7 +170,11 @@ async function relevantCitations(question: string): Promise<RetrievedCitations> 
       model: "nomic-embed-text",
     });
 
-    const documents = await queryDocumentsBySimilarity<SimilarDocumentRow>(questionEmbedding, 0.75, 5);
+    const documents = await queryDocumentsBySimilarity<SimilarDocumentRow>(
+      questionEmbedding,
+      MIN_RETRIEVAL_SCORE,
+      5,
+    );
 
     if (documents.rows.length === 0) {
       return {
@@ -207,9 +192,17 @@ async function relevantCitations(question: string): Promise<RetrievedCitations> 
 
     try {
       const documents = await queryDocumentsByKeywordMatch(question);
+      const aboveThreshold = documents.rows.filter((document) => Number(document.similarity) >= MIN_RETRIEVAL_SCORE);
+
+      if (aboveThreshold.length === 0) {
+        return {
+          citations: [],
+          retrievalMethod: "keyword",
+        };
+      }
 
       return {
-        citations: citationsFromDocuments(documents.rows),
+        citations: citationsFromDocuments(aboveThreshold),
         retrievalMethod: "keyword",
       };
     } catch {
@@ -235,85 +228,151 @@ async function storeConversation(question: string, answer: string, citations: Ci
   }
 }
 
+function createSseEvent(event: string, data: unknown) {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+function fallbackAnswer() {
+  return "The answer is not in the knowledge base.";
+}
+
 export async function POST(request: Request) {
+  const rateLimit = await applyRateLimit(request, {
+    bucket: "/api/chat",
+    limit: 12,
+    windowMs: 5 * 60_000,
+  });
+
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit);
+  }
+
   const body = (await request.json().catch(() => null)) as ChatBody | null;
-  const question = cleanText(body?.question, "");
+  const questionResult = QUESTION_SCHEMA.safeParse(body?.question);
+  const question = questionResult.success ? questionResult.data : "";
 
   if (!question) {
-    return Response.json({ error: "question is required." }, { status: 400 });
+    return Response.json(
+      { error: `question is required and must be ${MAX_CHAT_QUESTION_LENGTH} characters or fewer.` },
+      { status: 400 },
+    );
   }
 
-  try {
-    const { citations, retrievalMethod } = await relevantCitations(question);
+  const encoder = new TextEncoder();
 
-    if (citations.length === 0) {
-      const answer = "The answer is not in the knowledge base.";
-      const stored = await storeConversation(question, answer, []);
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (event: string, data: unknown) => {
+        controller.enqueue(encoder.encode(createSseEvent(event, data)));
+      };
 
-      return Response.json(
-        {
+      try {
+        send("status", { stage: "retrieving" });
+
+        const { citations, retrievalMethod } = await relevantCitations(question);
+
+        if (citations.length === 0) {
+          const answer = fallbackAnswer();
+          const stored = await storeConversation(question, answer, []);
+
+          send("meta", {
+            citations: [],
+            grounded: false,
+            notInKnowledgeBase: true,
+            retrieval_method: retrievalMethod,
+          });
+          send("delta", { chunk: answer });
+          send("done", {
+            success: true,
+            answer,
+            citations: [],
+            grounded: false,
+            notInKnowledgeBase: true,
+            stored,
+            retrieval_method: retrievalMethod,
+          });
+          controller.close();
+          return;
+        }
+
+        send("meta", {
+          citations,
+          grounded: true,
+          notInKnowledgeBase: false,
+          retrieval_method: retrievalMethod,
+        });
+        send("status", { stage: "generating" });
+
+        const context = citations
+          .map(
+            (citation, index) =>
+              `[${index + 1}] ${citation.filename} (similarity: ${citation.score.toFixed(3)})\n${citation.excerpt}`,
+          )
+          .join("\n\n");
+        const prompt = `Context:\n${context}\n\nQuestion: ${question}\n\nAnswer using only the context.`;
+
+        let answer = "";
+
+        try {
+          const result = await generateResponseStream(prompt, {
+            systemPrompt:
+              "You are a retrieval-augmented assistant for the MineTech mining operations knowledge base. Use only the provided context and answer directly.",
+            temperature: 0.2,
+            timeoutMs: 60_000,
+            onToken: (chunk) => {
+              answer += chunk;
+              send("delta", { chunk });
+            },
+          });
+
+          answer = result.text || answer;
+        } catch (error) {
+          if (!answer.trim()) {
+            answer = fallbackAnswer();
+            send("delta", { chunk: answer });
+          }
+
+          send("status", {
+            stage: "generation_failed",
+            error: error instanceof Error ? error.message : "Ollama generation failed.",
+          });
+        }
+
+        if (!answer.trim()) {
+          answer = fallbackAnswer();
+          send("delta", { chunk: answer });
+        }
+
+        const stored = await storeConversation(question, answer, citations);
+
+        send("done", {
           success: true,
           answer,
-          citations: [],
-          grounded: false,
-          notInKnowledgeBase: true,
+          citations,
+          grounded: true,
+          notInKnowledgeBase: false,
           stored,
           retrieval_method: retrievalMethod,
-        },
-        { status: 200 },
-      );
-    }
+        });
+        controller.close();
+      } catch (error) {
+        send("error", {
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to answer the mining operations question.",
+        });
+        controller.close();
+      }
+    },
+  });
 
-    const context = citations
-      .map(
-        (citation, index) =>
-          `[${index + 1}] ${citation.filename} (similarity: ${citation.score.toFixed(3)})\n${citation.excerpt}`,
-      )
-      .join("\n\n");
-
-    let answer = "The answer is not in the mining operations knowledge base.";
-
-    try {
-      const result = await generateResponse(
-        `Context:\n${context}\n\nQuestion: ${question}\n\nAnswer using only the context.`,
-        {
-          systemPrompt:
-            "You are a retrieval-augmented assistant for the MineTech mining operations knowledge base. Use only the provided context.",
-          temperature: 0.2,
-          timeoutMs: 60_000,
-        },
-      );
-
-      answer = cleanText(result.text, answer);
-    } catch {
-      answer = "The answer is not in the mining operations knowledge base.";
-    }
-
-    const grounded = !/not in the (?:mining operations )?knowledge base/i.test(answer);
-    const stored = await storeConversation(question, answer, grounded ? citations : []);
-
-    return Response.json(
-      {
-        success: true,
-        answer,
-        citations: grounded ? citations : [],
-        grounded,
-        notInKnowledgeBase: !grounded,
-        stored,
-        retrieval_method: retrievalMethod,
-      },
-      { status: 200 },
-    );
-  } catch (error) {
-    return Response.json(
-      {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to answer the mining operations question.",
-      },
-      { status: 500 },
-    );
-  }
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-store, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

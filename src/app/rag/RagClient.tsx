@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import { readChatStream } from "@/lib/chat-stream";
+
 type DocumentSummary = {
   id: string;
   filename: string;
@@ -46,6 +48,7 @@ type ChatResponse = {
   grounded?: boolean;
   notInKnowledgeBase?: boolean;
   error?: string;
+  retrieval_method?: string;
 };
 
 function formatDate(value: string) {
@@ -242,26 +245,91 @@ export default function RagPage() {
         body: JSON.stringify({ question: userMessage.text }),
       });
 
-      const data = (await response.json().catch(() => null)) as ChatResponse | null;
-      const answer = data?.answer;
+      const contentType = response.headers.get("content-type") ?? "";
 
-      if (!response.ok || !data?.success || typeof answer !== "string") {
+      if (!response.ok) {
+        const data = (await response.json().catch(() => null)) as ChatResponse | null;
+
         throw new Error(data?.error ?? "Failed to answer the question.");
       }
 
-      const assistantMessage: ChatMessage = {
-        id: pendingAssistantId,
-        role: "assistant",
-        text: answer,
-        citations: data.citations ?? [],
-        grounded: Boolean(data.grounded),
-        notInKnowledgeBase: Boolean(data.notInKnowledgeBase),
-        createdAt: new Date().toISOString(),
-      };
+      if (!contentType.includes("text/event-stream")) {
+        const data = (await response.json().catch(() => null)) as ChatResponse | null;
+        const answer = data?.answer;
 
-      setMessages((current) =>
-        current.map((message) => (message.id === pendingAssistantId ? assistantMessage : message)),
-      );
+        if (!data?.success || typeof answer !== "string") {
+          throw new Error(data?.error ?? "Failed to answer the question.");
+        }
+
+        const assistantMessage: ChatMessage = {
+          id: pendingAssistantId,
+          role: "assistant",
+          text: answer,
+          citations: data.citations ?? [],
+          grounded: Boolean(data.grounded),
+          notInKnowledgeBase: Boolean(data.notInKnowledgeBase),
+          createdAt: new Date().toISOString(),
+        };
+
+        setMessages((current) =>
+          current.map((message) => (message.id === pendingAssistantId ? assistantMessage : message)),
+        );
+
+        return;
+      }
+
+      await readChatStream(response, {
+        onMeta: (payload) => {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === pendingAssistantId
+                ? {
+                    ...message,
+                    citations: payload.citations ?? [],
+                    grounded: Boolean(payload.grounded),
+                    notInKnowledgeBase: Boolean(payload.notInKnowledgeBase),
+                  }
+                : message,
+            ),
+          );
+        },
+        onDelta: (chunk) => {
+          if (!chunk) {
+            return;
+          }
+
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === pendingAssistantId
+                ? {
+                    ...message,
+                    text: `${message.text}${chunk}`,
+                    isTyping: false,
+                  }
+                : message,
+            ),
+          );
+        },
+        onDone: (payload) => {
+          setMessages((current) =>
+            current.map((message) =>
+              message.id === pendingAssistantId
+                ? {
+                    ...message,
+                    text: payload.answer ?? message.text,
+                    citations: payload.citations ?? message.citations,
+                    grounded: Boolean(payload.grounded),
+                    notInKnowledgeBase: Boolean(payload.notInKnowledgeBase),
+                    isTyping: false,
+                  }
+                : message,
+            ),
+          );
+        },
+        onError: (message) => {
+          throw new Error(message);
+        },
+      });
     } catch (error) {
       setMessages((current) => current.filter((message) => message.id !== pendingAssistantId));
       setChatError(
@@ -501,6 +569,7 @@ export default function RagPage() {
             <form className="mt-5 flex flex-col gap-3 sm:flex-row" onSubmit={handleQuestionSubmit}>
               <input
                 value={question}
+                  maxLength={2000}
                 onChange={(event) => setQuestion(event.target.value)}
                 placeholder="What are the safety protocols for underground drilling operations?"
                 className="flex-1 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm text-slate-900 shadow-inner outline-none transition placeholder:text-slate-400 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-100"
@@ -561,25 +630,27 @@ export default function RagPage() {
                     </div>
 
                     {message.isTyping ? (
-                      <div
-                        className="mt-4 flex items-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-600"
-                        aria-live="polite"
-                      >
-                        <span className="inline-flex items-center gap-1">
-                          <span
-                            className="h-2 w-2 rounded-full bg-slate-400 animate-bounce"
-                            style={{ animationDelay: "0ms" }}
-                          />
-                          <span
-                            className="h-2 w-2 rounded-full bg-slate-400 animate-bounce"
-                            style={{ animationDelay: "140ms" }}
-                          />
-                          <span
-                            className="h-2 w-2 rounded-full bg-slate-400 animate-bounce"
-                            style={{ animationDelay: "280ms" }}
-                          />
-                        </span>
-                        <span>Checking the mining operations knowledge base...</span>
+                      <div className="mt-4 space-y-3 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+                        {message.text ? (
+                          <p className="whitespace-pre-wrap leading-7 text-slate-700">{message.text}</p>
+                        ) : null}
+                        <div className="flex items-center gap-3" aria-live="polite">
+                          <span className="inline-flex items-center gap-1">
+                            <span
+                              className="h-2 w-2 rounded-full bg-slate-400 animate-bounce"
+                              style={{ animationDelay: "0ms" }}
+                            />
+                            <span
+                              className="h-2 w-2 rounded-full bg-slate-400 animate-bounce"
+                              style={{ animationDelay: "140ms" }}
+                            />
+                            <span
+                              className="h-2 w-2 rounded-full bg-slate-400 animate-bounce"
+                              style={{ animationDelay: "280ms" }}
+                            />
+                          </span>
+                          <span>Checking the mining operations knowledge base...</span>
+                        </div>
                       </div>
                     ) : (
                       <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-slate-700">

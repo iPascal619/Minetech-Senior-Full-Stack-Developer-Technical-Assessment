@@ -1,4 +1,5 @@
 import { query } from "@/lib/db";
+import { applyRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +13,16 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
   if (!id) {
     return Response.json({ success: false, error: "Document id is required." }, { status: 400 });
+  }
+
+  const rateLimit = await applyRateLimit(_request, {
+    bucket: "/api/documents/:id",
+    limit: 20,
+    windowMs: 60_000,
+  });
+
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit);
   }
 
   try {

@@ -1,5 +1,7 @@
 import { query } from "@/lib/db";
+import { applyRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { ensureTicketSchema } from "@/lib/ticket-schema";
+import { cleanText } from "@/lib/normalization";
 import { normalizeTicketStatus, serializeTicket, type TicketRow } from "@/lib/ticket-types";
 
 export const runtime = "nodejs";
@@ -20,35 +22,21 @@ type TicketUpdateBody = {
   suggested_reply?: unknown;
 };
 
-function cleanText(value: unknown, fallback = "") {
-  if (typeof value === "string") {
-    const compact = value.replace(/\s+/g, " ").trim();
-
-    return compact || fallback;
-  }
-
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-
-  if (value == null) {
-    return fallback;
-  }
-
-  try {
-    const serialized = JSON.stringify(value);
-
-    return serialized ? serialized.replace(/\s+/g, " ").trim() : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 export async function DELETE(_request: Request, { params }: RouteParams) {
   const { id } = await params;
 
   if (!id) {
     return Response.json({ success: false, error: "Ticket id is required." }, { status: 400 });
+  }
+
+  const rateLimit = await applyRateLimit(_request, {
+    bucket: "/api/tickets/:id",
+    limit: 20,
+    windowMs: 60_000,
+  });
+
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit);
   }
 
   try {
@@ -82,6 +70,16 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
   if (!id) {
     return Response.json({ success: false, error: "Ticket id is required." }, { status: 400 });
+  }
+
+  const rateLimit = await applyRateLimit(request, {
+    bucket: "/api/tickets/:id",
+    limit: 20,
+    windowMs: 60_000,
+  });
+
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit);
   }
 
   const body = (await request.json().catch(() => null)) as TicketUpdateBody | null;

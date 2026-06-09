@@ -1,10 +1,17 @@
 import { randomUUID } from "node:crypto";
 
 import { query, toPgVectorLiteral } from "@/lib/db";
+import { MAX_DOCUMENT_CONTENT_LENGTH, MAX_DOCUMENT_FILENAME_LENGTH, createSanitizedTextSchema, sanitizeFilename } from "@/lib/input";
+import { applyRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { generateEmbedding } from "@/lib/ollama";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const DOCUMENT_CONTENT_SCHEMA = createSanitizedTextSchema({
+  allowNewlines: true,
+  maxLength: MAX_DOCUMENT_CONTENT_LENGTH,
+});
 
 type DocumentBody = {
   filename?: unknown;
@@ -17,30 +24,6 @@ type DocumentRow = {
   content: string;
   created_at: string | Date;
 };
-
-function cleanText(value: unknown, fallback = "") {
-  if (typeof value === "string") {
-    const compact = value.replace(/\s+/g, " ").trim();
-
-    return compact || fallback;
-  }
-
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-
-  if (value == null) {
-    return fallback;
-  }
-
-  try {
-    const serialized = JSON.stringify(value);
-
-    return serialized ? serialized.replace(/\s+/g, " ").trim() : fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 function serializeDocument(row: DocumentRow) {
   return {
@@ -115,18 +98,18 @@ async function readPayload(request: Request) {
   if (contentType.includes("multipart/form-data")) {
     const formData = await request.formData();
     const fileEntry = formData.get("document") ?? formData.get("file");
-    const filename = cleanText(formData.get("filename"), "site-document.txt");
+    const filename = typeof formData.get("filename") === "string" ? formData.get("filename") : "site-document.txt";
 
     if (fileEntry instanceof File) {
       return {
         filename: filename || fileEntry.name || "site-document.txt",
-        content: cleanText(decodeUploadedText(await fileEntry.arrayBuffer()), ""),
+        content: decodeUploadedText(await fileEntry.arrayBuffer()),
       };
     }
 
     return {
       filename: filename || "site-document.txt",
-      content: cleanText(formData.get("content"), ""),
+      content: typeof formData.get("content") === "string" ? formData.get("content") : "",
     };
   }
 
@@ -134,18 +117,28 @@ async function readPayload(request: Request) {
     const body = (await request.json().catch(() => null)) as DocumentBody | null;
 
     return {
-      filename: cleanText(body?.filename, "site-document.txt") || "site-document.txt",
-      content: cleanText(body?.content, ""),
+      filename: typeof body?.filename === "string" ? body.filename : "site-document.txt",
+      content: typeof body?.content === "string" ? body.content : "",
     };
   }
 
   return {
     filename: "site-document.txt",
-    content: cleanText(await request.text(), ""),
+    content: await request.text(),
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const rateLimit = await applyRateLimit(request, {
+    bucket: "/api/documents",
+    limit: 30,
+    windowMs: 60_000,
+  });
+
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit);
+  }
+
   try {
     const result = await query<DocumentRow>(
       `SELECT id, filename, content, created_at
@@ -163,10 +156,30 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const rateLimit = await applyRateLimit(request, {
+    bucket: "/api/documents",
+    limit: 12,
+    windowMs: 60_000,
+  });
+
+  if (!rateLimit.allowed) {
+    return rateLimitResponse(rateLimit);
+  }
+
   const payload = await readPayload(request);
 
-  if (!payload.content) {
-    return Response.json({ error: "Mining document content is required." }, { status: 400 });
+  const filename = sanitizeFilename(payload.filename || "site-document.txt", "site-document.txt");
+  const contentResult = DOCUMENT_CONTENT_SCHEMA.safeParse(payload.content);
+
+  if (filename.length > MAX_DOCUMENT_FILENAME_LENGTH) {
+    return Response.json({ error: `Filename must be ${MAX_DOCUMENT_FILENAME_LENGTH} characters or fewer.` }, { status: 400 });
+  }
+
+  if (!contentResult.success) {
+    return Response.json(
+      { error: `Mining document content is required and must be ${MAX_DOCUMENT_CONTENT_LENGTH} characters or fewer.` },
+      { status: 400 },
+    );
   }
 
   try {
@@ -174,7 +187,7 @@ export async function POST(request: Request) {
       `INSERT INTO documents (id, filename, content, created_at)
        VALUES ($1, $2, $3, NOW())
        RETURNING id, filename, content, created_at`,
-      [randomUUID(), payload.filename || "document.txt", payload.content],
+      [randomUUID(), filename, contentResult.data],
     );
 
     const savedDocument = saved.rows[0];

@@ -1,3 +1,5 @@
+import { sanitizeText } from "@/lib/input";
+
 const CATEGORY_SET = new Set([
   "billing",
   "technical_issue",
@@ -13,7 +15,7 @@ const PRIORITY_SET = new Set(["low", "medium", "high", "urgent"]);
 
 export function cleanText(value: unknown, fallback = "") {
   if (typeof value === "string") {
-    const compact = value.replace(/\s+/g, " ").trim();
+    const compact = sanitizeText(value, { allowNewlines: false });
 
     return compact || fallback;
   }
@@ -29,7 +31,7 @@ export function cleanText(value: unknown, fallback = "") {
   try {
     const serialized = JSON.stringify(value);
 
-    return serialized ? serialized.replace(/\s+/g, " ").trim() : fallback;
+    return serialized ? sanitizeText(serialized, { allowNewlines: false }) || fallback : fallback;
   } catch {
     return fallback;
   }
