@@ -1,4 +1,4 @@
-import { cleanText, normalizeTicketStatus, type TicketStatus, TICKET_STATUSES } from "@/lib/normalization";
+import { cleanText, inferSubjectFromRawText, normalizeTicketStatus, type TicketStatus, TICKET_STATUSES } from "@/lib/normalization";
 
 export type TicketFields = {
   subject: string;
@@ -66,15 +66,11 @@ export function ticketStatusClasses(status: TicketStatus) {
 }
 
 function fallbackFields(rawText: string): TicketFields {
-  const firstLine = rawText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find(Boolean);
   const requesterMatch = rawText.match(/(?:requester|from|name)\s*[:\-]\s*([^\n,;]+)/i);
   const emailMatch = rawText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
 
   return {
-    subject: (firstLine ?? rawText.slice(0, 120) ?? "Operational incident").slice(0, 120),
+    subject: inferSubjectFromRawText(rawText).slice(0, 120),
     requester: cleanText(requesterMatch?.[1] ?? emailMatch?.[0] ?? "Unknown reporter", "Unknown reporter").slice(0, 80),
     issue_summary: cleanText(rawText, "No incident summary provided.").slice(0, 240) || "No incident summary provided.",
   };

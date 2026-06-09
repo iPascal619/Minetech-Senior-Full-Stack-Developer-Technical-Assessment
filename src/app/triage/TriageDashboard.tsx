@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 
 import { TICKET_STATUSES, ticketStatusLabel, type Ticket, type TicketStatus } from "@/lib/ticket-types";
+import { MINING_TICKET_CATEGORIES } from "@/lib/triage-categories";
 
 type TicketListResponse = {
   tickets?: Ticket[];
@@ -31,17 +32,6 @@ type TicketDeleteResponse = {
 const PRIORITY_ORDER = ["urgent", "high", "medium", "low"] as const;
 const STATUS_ORDER: TicketStatus[] = ["open", "in_progress", "resolved", "closed"];
 const PAGE_SIZE = 6;
-const DEFAULT_CATEGORIES = [
-  "billing",
-  "technical_issue",
-  "account_access",
-  "bug_report",
-  "feature_request",
-  "security",
-  "general",
-  "other",
-];
-
 const clampTwoLinesStyle: CSSProperties = {
   display: "-webkit-box",
   WebkitBoxOrient: "vertical",
@@ -1008,7 +998,7 @@ export default function TriageDashboard() {
     },
   );
 
-  const categoryOptions = Array.from(new Set([...DEFAULT_CATEGORIES, ...tickets.map((ticket) => ticket.category)])).sort();
+  const categoryOptions = Array.from(new Set([...MINING_TICKET_CATEGORIES, ...tickets.map((ticket) => ticket.category)])).sort();
   const priorityOptions = PRIORITY_ORDER.filter((priority) => tickets.some((ticket) => ticket.priority === priority));
   const pageStart = filteredTickets.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const pageEnd = Math.min(safePage * PAGE_SIZE, filteredTickets.length);

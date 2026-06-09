@@ -3,6 +3,7 @@ type GenerateResponseOptions = {
   temperature?: number;
   format?: "json" | Record<string, unknown>;
   timeoutMs?: number;
+  numPredict?: number;
 };
 
 type GenerateResponseStreamOptions = GenerateResponseOptions & {
@@ -34,8 +35,9 @@ type OllamaEmbeddingResult = {
 function getOllamaConfig() {
   return {
     baseUrl: (process.env.OLLAMA_BASE_URL ?? "http://localhost:11434").replace(/\/$/, ""),
-    model: process.env.OLLAMA_MODEL ?? "qwen2.5:7b",
+    model: process.env.OLLAMA_MODEL ?? "qwen2.5:3b",
     embeddingModel: process.env.OLLAMA_EMBEDDING_MODEL ?? "nomic-embed-text",
+    keepAlive: process.env.OLLAMA_KEEP_ALIVE ?? "30m",
   };
 }
 
@@ -114,7 +116,7 @@ export async function generateResponse(
   prompt: string,
   options: GenerateResponseOptions = {},
 ) {
-  const { baseUrl, model } = getOllamaConfig();
+  const { baseUrl, model, keepAlive } = getOllamaConfig();
   const requestUrl = new URL("/api/generate", baseUrl).toString();
   const controller = new AbortController();
   const timeoutId =
@@ -134,12 +136,18 @@ export async function generateResponse(
         system: options.systemPrompt,
         stream: false,
         format: options.format,
+        keep_alive: keepAlive,
         options:
           options.temperature === undefined
             ? undefined
             : {
                 temperature: options.temperature,
               },
+        ...(options.numPredict === undefined
+          ? {}
+          : {
+              num_predict: options.numPredict,
+            }),
       }),
       signal: controller.signal,
     });
@@ -175,7 +183,7 @@ export async function generateResponseStream(
   prompt: string,
   options: GenerateResponseStreamOptions = {},
 ) {
-  const { baseUrl, model } = getOllamaConfig();
+  const { baseUrl, model, keepAlive } = getOllamaConfig();
   const requestUrl = new URL("/api/generate", baseUrl).toString();
   const controller = new AbortController();
   const timeoutId =
@@ -195,12 +203,18 @@ export async function generateResponseStream(
         system: options.systemPrompt,
         stream: true,
         format: options.format,
+        keep_alive: keepAlive,
         options:
           options.temperature === undefined
             ? undefined
             : {
                 temperature: options.temperature,
               },
+        ...(options.numPredict === undefined
+          ? {}
+          : {
+              num_predict: options.numPredict,
+            }),
       }),
       signal: controller.signal,
     });

@@ -3,10 +3,11 @@ import { randomUUID } from "node:crypto";
 import { query } from "@/lib/db";
 import { MAX_TRIAGE_TEXT_LENGTH, createSanitizedTextSchema } from "@/lib/input";
 import { applyRateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { cleanText, normalizeCategory, normalizePriority } from "@/lib/normalization";
+import { cleanText, inferSubjectFromRawText, normalizeCategory, normalizePriority } from "@/lib/normalization";
 import { generateResponse } from "@/lib/ollama";
 import { ensureTicketSchema } from "@/lib/ticket-schema";
 import { parseTriageOutput } from "@/lib/triage-schema";
+import { MINING_TICKET_CATEGORIES } from "@/lib/triage-categories";
 import { serializeTicket, type TicketFields, type TicketRow } from "@/lib/ticket-types";
 
 export const runtime = "nodejs";
@@ -36,15 +37,11 @@ function truncate(value: string, maxLength: number) {
 }
 
 function fallbackFields(rawText: string): TicketFields {
-  const firstLine = rawText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find(Boolean);
   const requesterMatch = rawText.match(/(?:requester|from|name)\s*[:\-]\s*([^\n,;]+)/i);
   const emailMatch = rawText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
 
   return {
-    subject: truncate(firstLine ?? rawText.slice(0, 120) ?? "Operational incident", 120),
+    subject: truncate(inferSubjectFromRawText(rawText), 120),
     requester: truncate(requesterMatch?.[1] ?? emailMatch?.[0] ?? "Unknown reporter", 80),
     issue_summary: truncate(rawText, 240) || "No incident summary provided.",
   };
@@ -68,23 +65,25 @@ function normalizeTriage(rawText: string, parsed: Record<string, unknown> | null
     },
     suggested_reply: cleanText(
       candidate.suggested_reply,
-      "Thanks for reaching out. We are reviewing your request and will follow up shortly.",
+      "Thanks for reporting this. We are reviewing the issue, escalating it to the relevant team, and will follow up with the next operational steps shortly.",
     ),
   };
 }
 
 async function classifyTicket(rawText: string) {
   const prompt = [
-    "Classify the operational incident and return JSON only.",
-    'Return exactly one JSON object with this schema: {"category":"...","priority":"...","extracted_fields":{"subject":"...","requester":"...","issue_summary":"..."},"suggested_reply":"..."}',
-    "Allowed categories: billing, technical_issue, account_access, bug_report, feature_request, security, general, other.",
-    "Allowed priorities: low, medium, high, urgent.",
-    "Do not add markdown, fences, code blocks, or extra commentary.",
-    "Valid example 1:",
-    '{"category":"technical_issue","priority":"high","extracted_fields":{"subject":"Crusher belt slipping","requester":"Shift supervisor","issue_summary":"The primary crusher belt slipped twice during morning operations and needs immediate inspection."},"suggested_reply":"Thanks for reporting the crusher belt issue. We are treating this as a high-priority technical issue and will inspect the belt tension, drive assembly, and sensors immediately."}',
-    "Valid example 2:",
-    '{"category":"account_access","priority":"medium","extracted_fields":{"subject":"Portal login reset request","requester":"J. Singh","issue_summary":"The requester cannot access the scheduling portal after a password reset."},"suggested_reply":"Thanks for the update. We are reviewing the portal access issue and will confirm the next steps for account recovery shortly."}',
-    "Incident report text:",
+    "You are a mining incident triage assistant. Return only valid JSON.",
+    'Schema: {"category":"...","priority":"...","extracted_fields":{"subject":"...","requester":"...","issue_summary":"..."},"suggested_reply":"..."}',
+    `Categories: ${MINING_TICKET_CATEGORIES.join(", ")}.`,
+    "Pick the most specific category that fits the text.",
+    "Use equipment_fault for truck, conveyor, pump, drill, brake, hydraulic, leak, smoke, gearbox, motor, or breakdown.",
+    "Use safety_incident for injuries, near misses, hazards, fire, evacuation, or immediate site safety concerns.",
+    "Use production_delay for lost production, shutdown, or downtime caused by a site event.",
+    "Priorities: low, medium, high, urgent. Use urgent for active safety risk, stopped equipment, loss of braking, smoke, or immediate operational impact.",
+    "Write a short subject, a compact summary, and a practical suggested reply.",
+    "Do not add markdown or extra commentary.",
+    "Example: {\"category\":\"equipment_fault\",\"priority\":\"urgent\",\"extracted_fields\":{\"subject\":\"Hydraulic leak and braking loss at Shaft B2\",\"requester\":\"James Mutua\",\"issue_summary\":\"A haul truck at Shaft B2 reported a hydraulic leak and reduced braking response and was taken out of service.\"},\"suggested_reply\":\"Thanks for reporting this. We are treating it as an urgent equipment fault and escalating it to maintenance for immediate inspection of the hydraulic system and brakes.\"}",
+    "Incident text:",
     rawText,
   ].join("\n\n");
 
@@ -94,7 +93,8 @@ async function classifyTicket(rawText: string) {
         "You are an operational incident triage engine. You must output JSON only and never include extra prose.",
       format: "json",
       temperature: 0.05,
-      timeoutMs: 45_000,
+      numPredict: 192,
+      timeoutMs: 180_000,
     });
 
     return {

@@ -118,13 +118,13 @@ On Windows PowerShell, use `npm.cmd` if your shell does not resolve `npm` direct
 Install Ollama from https://ollama.com/download, then pull the two models used by the app:
 
 ```bash
-ollama pull qwen2.5:7b
+ollama pull qwen2.5:3b
 ollama pull nomic-embed-text
 ```
 
 The app uses:
 
-- `qwen2.5:7b` for triage and answer generation
+- `qwen2.5:3b` for triage and answer generation
 - `nomic-embed-text` for document embeddings
 
 Ollama runs on `http://localhost:11434` by default.
@@ -166,7 +166,7 @@ Then review `.env.local`:
 ```env
 DATABASE_URL=postgresql://postgres:pascal123@localhost:5432/minetech
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_MODEL=qwen2.5:3b
 ```
 
 Optional:
@@ -256,7 +256,7 @@ npm.cmd run build
 ### Ollama requests fail
 
 - Verify Ollama is running on `http://localhost:11434`.
-- Make sure `phi3:mini` and `nomic-embed-text` are available locally.
+- Make sure `qwen2.5:7b` and `nomic-embed-text` are available locally.
 
 ### Citations show but do not open
 
