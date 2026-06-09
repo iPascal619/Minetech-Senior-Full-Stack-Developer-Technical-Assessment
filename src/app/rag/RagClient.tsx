@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 
 import { readChatStream } from "@/lib/chat-stream";
@@ -181,6 +182,24 @@ function CitationIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
       <path d="M5.25 11.75h1.5V8.5H4.5V5.75h3v6H5.25Zm5.25 0h1.5V8.5H9.75V5.75h3v6h-3.25Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function HomeIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
+      <path d="M2.5 7.25L8 2.75l5.5 4.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4.25 6.75V13h7.5V6.75" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function BookIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true" className="h-3.5 w-3.5">
+      <path d="M3.5 3.5h6.75A2.25 2.25 0 0 1 12.5 5.75v7.75H5.25A1.75 1.75 0 0 1 3.5 11.75V3.5Z" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+      <path d="M5.5 3.5v8.25" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
     </svg>
   );
 }
@@ -643,6 +662,22 @@ export default function RagPage() {
             <p className="text-[13px] font-normal leading-5 text-slate-600">
               Ask questions against indexed site documents and get cited answers.
             </p>
+            <div className="mt-2 flex flex-wrap gap-2 text-[12px] font-medium text-slate-700">
+              <Link
+                href="/"
+                className="inline-flex h-8 items-center gap-2 rounded-full border-[0.5px] border-slate-200 bg-white px-3 transition hover:bg-slate-50"
+              >
+                <HomeIcon />
+                <span>Home</span>
+              </Link>
+              <Link
+                href="/triage"
+                className="inline-flex h-8 items-center gap-2 rounded-full border-[0.5px] border-slate-200 bg-white px-3 transition hover:bg-slate-50"
+              >
+                <BookIcon />
+                <span>Incident Triage</span>
+              </Link>
+            </div>
           </div>
 
           <div className="flex flex-wrap gap-2 lg:justify-end">
