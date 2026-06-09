@@ -58,14 +58,26 @@ export function inferSubjectFromRawText(rawText: string) {
   }
 
   if (/safety|injur|accident|near miss|hazard|fire|rescue|evacuat/.test(compact)) {
+    if (/conveyor walkway/.test(compact)) {
+      return "Safety incident at conveyor walkway";
+    }
+
     return appendLocation("Safety incident", rawText);
   }
 
   if (/power|electrical|electric|voltage|breaker|substation|generator|blackout|outage/.test(compact)) {
+    if (/processing plant/.test(compact)) {
+      return "Electrical outage at processing plant";
+    }
+
     return appendLocation("Electrical outage", rawText);
   }
 
   if (/water|dewater|dewatering|flood|pumping|pump station|inundation/.test(compact)) {
+    if (/north pit/.test(compact)) {
+      return "Water or dewatering issue at north pit";
+    }
+
     return appendLocation("Water or dewatering issue", rawText);
   }
 
@@ -73,7 +85,7 @@ export function inferSubjectFromRawText(rawText: string) {
     return "Account access issue";
   }
 
-  if (/it|system|network|portal|app|software|computer|email|vpn|server|database/.test(compact)) {
+  if (/\bit\b|system|network|portal|software|computer|email|vpn|server|database/.test(compact)) {
     return "IT system issue";
   }
 
@@ -90,27 +102,25 @@ export function normalizeCategory(value: unknown) {
   if (/billing|invoice|payment|charge|refund/.test(compact)) return "billing";
   if (/safety|injur|accident|near miss|hazard|spill|fire|fatal|rescue/.test(compact)) return "safety_incident";
   if (/maintenance|repair|service|servicing|work order|spare part|replacement/.test(compact)) return "maintenance_request";
+  if (/power|electrical|electric|voltage|breaker|substation|generator|blackout|outage/.test(compact)) return "power_electrical";
+  if (/dewater|dewatering|water|flood|pumping|pump station|inundation/.test(compact)) return "water_dewatering";
   if (/equipment|machine|crusher|conveyor|pump|drill|excavator|haul truck|truck|vehicle|breakdown|fault|mechanical/.test(compact)) return "equipment_fault";
   if (/production|output|downtime|shutdown|stoppage|delay|lost tonnes|lost production/.test(compact)) return "production_delay";
   if (/blast|blasting|explosive|detonat/.test(compact)) return "blasting_operations";
   if (/geology|geotech|geotechnical|slope|pit wall|ground control|strata|rock fall/.test(compact)) return "geology_geotechnical";
   if (/ventilation|air quality|dust|fume|gas|oxygen|vent /.test(compact) || /ventilation/.test(compact)) return "ventilation_air_quality";
-  if (/power|electrical|electric|voltage|breaker|substation|generator|blackout|outage/.test(compact)) return "power_electrical";
-  if (/dewater|dewatering|water|flood|pumping|pump station|inundation/.test(compact)) return "water_dewatering";
   if (/logistics|transport|haul|fleet|road|delivery|dispatch|shipping/.test(compact)) return "logistics_transport";
   if (/procurement|purchase|po\b|inventory|stock|supply|fuel|spares?|materials|warehouse/.test(compact)) return "procurement_supply_chain";
   if (/access control|gate|badge|turnstile|visitor|entry permit|security gate/.test(compact)) return "access_control";
   if (/compliance|audit|permit|inspection|regulatory|certificate|reporting/.test(compact)) return "compliance_audit";
   if (/environmental|spill|pollution|waste|tailings|emission|effluent/.test(compact)) return "environmental_incident";
   if (/hr|payroll|leave|roster|staffing|recruitment|disciplinary|training/.test(compact)) return "hr_operations";
-  if (/it|system|network|portal|app|software|computer|email|vpn|server|database/.test(compact)) return "it_system";
-  if (/account|profile|settings|access|login|sign in|signin|password|auth/.test(compact)) return "account_access";
-  if (/security|theft|intrusion|unauthor|burglary|trespass|violence/.test(compact)) return "security";
   if (/account|profile|settings/.test(compact)) return "account_access";
   if (/access|login|sign in|signin|password|auth/.test(compact)) return "account_access";
   if (/bug|error|crash|defect|broken|failure/.test(compact)) return "bug_report";
   if (/feature|enhancement|request/.test(compact)) return "feature_request";
-  if (/security|vulnerab|breach/.test(compact)) return "security";
+  if (/security|theft|intrusion|unauthor|burglary|trespass|violence/.test(compact)) return "security";
+  if (/\bit\b|system|network|portal|app|software|computer|email|vpn|server|database/.test(compact)) return "it_system";
   if (/technical|performance|outage|service|incident/.test(compact)) return "technical_issue";
 
   const slug = normalizeSlug(compact, "general");
@@ -121,26 +131,29 @@ export function normalizeCategory(value: unknown) {
 export function inferCategoryFromRawText(rawText: string) {
   const compact = cleanText(rawText, "").toLowerCase();
 
-  if (/safety|injur|accident|near miss|hazard|fire|rescue|evacuat/.test(compact)) return "safety_incident";
+  if (/power|electrical|electric|voltage|breaker|substation|generator|blackout|outage/.test(compact)) return "power_electrical";
+  if (/water|dewater|dewatering|flood|pumping|pump station|inundation/.test(compact)) return "water_dewatering";
+  if (/near miss|hazard|fire|rescue|evacuat/.test(compact)) return "safety_incident";
   if (/equipment|truck|haul truck|crusher|conveyor|pump|drill|excavator|vehicle|fault|breakdown|hydraulic|brake|braking|leak|smoke|motor|gearbox|hydraulic/.test(compact)) {
     return "equipment_fault";
   }
+  if (/injur|accident/.test(compact) && !/no injur|no injuries|without injur/.test(compact)) return "safety_incident";
   if (/maintenance team|work order|repair|service|replace|spare part|servicing/.test(compact)) return "maintenance_request";
   if (/production|delayed|downtime|shutdown|stoppage|output|lost production/.test(compact)) return "production_delay";
   if (/blast|blasting|explosive|detonat/.test(compact)) return "blasting_operations";
   if (/geology|geotech|slope|pit wall|ground control|strata|rock fall/.test(compact)) return "geology_geotechnical";
   if (/ventilation|air quality|dust|fume|gas|oxygen/.test(compact)) return "ventilation_air_quality";
-  if (/power|electrical|electric|voltage|breaker|substation|generator|blackout|outage/.test(compact)) return "power_electrical";
-  if (/water|dewater|dewatering|flood|pumping|pump station|inundation/.test(compact)) return "water_dewatering";
   if (/logistics|transport|haul|fleet|road|delivery|dispatch|shipping/.test(compact)) return "logistics_transport";
   if (/procurement|purchase|po\b|inventory|stock|supply|fuel|spares?|materials|warehouse/.test(compact)) return "procurement_supply_chain";
   if (/access control|gate|badge|turnstile|visitor|entry permit/.test(compact)) return "access_control";
   if (/compliance|audit|permit|inspection|regulatory|certificate|reporting/.test(compact)) return "compliance_audit";
   if (/environmental|spill|pollution|waste|tailings|emission|effluent/.test(compact)) return "environmental_incident";
   if (/hr|payroll|leave|roster|staffing|recruitment|disciplinary|training/.test(compact)) return "hr_operations";
-  if (/it|system|network|portal|app|software|computer|email|vpn|server|database/.test(compact)) return "it_system";
-  if (/account|profile|settings|login|password|auth/.test(compact)) return "account_access";
+  if (/bug|error|crash|defect|broken|failure/.test(compact)) return "bug_report";
+  if (/feature|enhancement|request/.test(compact)) return "feature_request";
   if (/security|theft|intrusion|unauthor|burglary|trespass|violence/.test(compact)) return "security";
+  if (/\bit\b|system|network|portal|app|software|computer|email|vpn|server|database/.test(compact)) return "it_system";
+  if (/account|profile|settings|login|password|auth/.test(compact)) return "account_access";
   if (/billing|invoice|payment|charge|refund/.test(compact)) return "billing";
 
   return "technical_issue";
@@ -164,6 +177,14 @@ export function inferPriorityFromRawText(rawText: string) {
 
   if (/fatal|injur|fire|smoke|rescue|evacuat|stopped equipment|out of service|braking loss|lost braking|immediate|urgent|critical/.test(compact)) {
     return "urgent";
+  }
+
+  if (/power|electrical|electric|voltage|breaker|substation|generator|blackout|outage/.test(compact)) {
+    return "high";
+  }
+
+  if (/water|dewater|dewatering|flood|pumping|pump station|inundation/.test(compact)) {
+    return "high";
   }
 
   if (/safety|equipment|fault|breakdown|hydraulic|leak|production delayed|production delay|downtime|shutdown|stoppage|near miss|hazard/.test(compact)) {

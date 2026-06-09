@@ -30,10 +30,54 @@ type TriageResult = {
   suggested_reply: string;
 };
 
+type TriageResponseMeta = {
+  raw?: {
+    model?: string;
+    total_duration?: number;
+    prompt_eval_count?: number;
+    eval_count?: number;
+  };
+};
+
 function truncate(value: string, maxLength: number) {
   const compact = value.replace(/\s+/g, " ").trim();
 
   return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
+function formatDuration(rawDuration?: number) {
+  if (typeof rawDuration !== "number" || !Number.isFinite(rawDuration)) {
+    return null;
+  }
+
+  return Math.round(rawDuration / 1_000_000);
+}
+
+function logTriageAttempt(details: {
+  stage: "success" | "retry" | "fallback" | "error";
+  rawTextLength: number;
+  parsed: boolean;
+  warning: string | null;
+  response?: TriageResponseMeta;
+  errorMessage?: string;
+}) {
+  const model = details.response?.raw?.model ?? "unknown";
+  const durationMs = formatDuration(details.response?.raw?.total_duration);
+
+  console.info(
+    JSON.stringify({
+      event: "triage_request",
+      stage: details.stage,
+      model,
+      durationMs,
+      promptEvalCount: details.response?.raw?.prompt_eval_count ?? null,
+      evalCount: details.response?.raw?.eval_count ?? null,
+      rawTextLength: details.rawTextLength,
+      parsed: details.parsed,
+      warning: details.warning,
+      errorMessage: details.errorMessage ?? null,
+    }),
+  );
 }
 
 function fallbackFields(rawText: string): TicketFields {
@@ -107,6 +151,14 @@ async function classifyTicket(rawText: string) {
     const firstAttempt = await requestTriage(prompt);
 
     if (firstAttempt.parsed) {
+      logTriageAttempt({
+        stage: "success",
+        rawTextLength: rawText.length,
+        parsed: true,
+        warning: null,
+        response: firstAttempt.response,
+      });
+
       return {
         triage: normalizeTriage(rawText, firstAttempt.parsed),
         warning: null,
@@ -118,12 +170,30 @@ async function classifyTicket(rawText: string) {
       'Please return only valid JSON matching this exact schema: {"category":"...","priority":"...","extracted_fields":{"subject":"...","requester":"...","issue_summary":"..."},"suggested_reply":"..."}. Return JSON only, no explanation.';
 
     const retryAttempt = await requestTriage(correctionPrompt);
+    const parsed = Boolean(retryAttempt.parsed);
+    const warning = parsed ? "LLM output corrected on retry" : "Fallback values used";
+
+    logTriageAttempt({
+      stage: parsed ? "retry" : "fallback",
+      rawTextLength: rawText.length,
+      parsed,
+      warning,
+      response: retryAttempt.response,
+    });
 
     return {
       triage: retryAttempt.parsed ? normalizeTriage(rawText, retryAttempt.parsed) : normalizeTriage(rawText, null),
-      warning: retryAttempt.parsed ? "LLM output corrected on retry" : "Fallback values used",
+      warning,
     };
   } catch (error) {
+    logTriageAttempt({
+      stage: "error",
+      rawTextLength: rawText.length,
+      parsed: false,
+      warning: null,
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
+
     return {
       triage: normalizeTriage(rawText, null),
       warning:

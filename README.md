@@ -256,7 +256,7 @@ npm.cmd run build
 ### Ollama requests fail
 
 - Verify Ollama is running on `http://localhost:11434`.
-- Make sure `qwen2.5:7b` and `nomic-embed-text` are available locally.
+- Make sure `qwen2.5:3b` and `nomic-embed-text` are available locally.
 
 ### Citations show but do not open
 
