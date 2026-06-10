@@ -177,14 +177,14 @@ cp .env.example .env.local
 Then review `.env.local`:
 
 ```env
-DATABASE_URL=postgresql://postgres:pascal123@localhost:5432/minetech
+DATABASE_URL=postgresql://<user>:<password>@localhost:5432/minetech
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:3b
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 OLLAMA_KEEP_ALIVE=30m
 ```
 
-The app reads these values from `src/lib/db.ts` and `src/lib/ollama.ts`.
+Use your own database credentials in `.env.local`. The app reads these values from `src/lib/db.ts` and `src/lib/ollama.ts`.
 
 ### 6. Start the app
 
@@ -312,4 +312,4 @@ For production, run the SQL migrations against the hosted database before sendin
 
 ## License
 
-No license file is included in this assessment repository.
+This repository is licensed under the MIT License. See [LICENSE](LICENSE).
