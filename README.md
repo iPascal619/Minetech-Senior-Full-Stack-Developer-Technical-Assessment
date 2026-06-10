@@ -8,6 +8,7 @@ It currently provides:
 2. A retrieval-augmented knowledge base for safety and operations documents.
 3. Local-first chat storage, source citations, and incident management UI.
 4. Benchmark scripts for triage and RAG scenarios.
+5. Automatic browser-based chat history for the RAG workflow.
 
 ## Highlights
 
@@ -96,7 +97,8 @@ migrations/
 ### Chat workflow improvements
 
 - The chat transcript scrolls inside the card instead of stretching the page.
-- You can store a chat locally in the browser.
+- Chat history auto-saves in the browser as you continue the conversation.
+- Restoring a saved chat resumes it as the active thread, so you can keep chatting without storing it again.
 - You can start a new chat without losing the existing stored transcript.
 - Internal SSE status events are hidden from the UI.
 
@@ -253,7 +255,7 @@ The repo is currently in a working state with these behaviors implemented:
 
 - The triage route normalizes model output, falls back on incomplete JSON, and stores incidents in PostgreSQL.
 - The RAG route retrieves citations with vector-first search, falls back to keyword search, and hides internal status events from the UI.
-- The chat page supports scrollable transcripts, local chat storage, source inspection, and a new-chat flow.
+- The chat page supports scrollable transcripts, automatic local chat storage, source inspection, and a new-chat flow.
 - The API routes emit structured JSON logs for request-level observability.
 - `npm test` and `npm run build` pass, and `npm run benchmark:ai` is available for a live end-to-end check.
 
